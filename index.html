@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-20T07:44:29.251Z">
+<meta name="build" content="2026-11-20T08:01:40.770Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -379,6 +379,9 @@ export function createDali(over = {}) {
   const nose = ellipsoid(0.045, 1.2, 0.8, 0.8, mat(C.orange), 12); nose.position.set(0, 1.02, 0.55); body.add(nose);
   const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.012, 6, 16, Math.PI), black);
   [-0.045, 0.045].forEach(x => { const m = mouth.clone(); m.position.set(x, 0.96, 0.54); m.rotation.z = Math.PI; body.add(m); });
+  // 말할 때 열리는 입(평소엔 숨김): ω 입 바로 아래
+  const talkMouth = ellipsoid(1, 0.06, 0.05, 0.03, mat(0x6b2a22, { roughness: 0.5 }), 16);
+  talkMouth.position.set(0, 0.915, 0.535); talkMouth.visible = false; body.add(talkMouth);
 
   // 몸통과 배
   const torso = ellipsoid(1, P.torsoRx, P.torsoRy, 0.36, fur, 28); torso.position.set(0, P.torsoY, 0); body.add(torso);
@@ -407,7 +410,7 @@ export function createDali(over = {}) {
   const base = ellipsoid(0.13, 1, 1, 1, fur, 16); tail.add(base);
   body.add(tail);
 
-  root.userData.parts = { body, head, arms, tail };
+  root.userData.parts = { body, head, arms, tail, talkMouth };
   return { root, parts: root.userData.parts };
 }
 
@@ -424,12 +427,18 @@ export function animateNarmi(n, t, opt = {}) {
   body.rotation.z = -(opt.bank ?? 0) * 0.5;      // 좌우 기울기
   feet.forEach(f => f.rotation.x = opt.tuck ?? 0.6 * flap); // 비행 중엔 발을 뒤로 접는다
 }
+// opt.talk: 입 벌린 정도(0~1). 말하는 동안 고개를 까딱이고 왼팔로 손짓한다.
 export function animateDali(d, t, opt = {}) {
-  const { body, arms, tail } = d.parts;
+  const { body, arms, tail, talkMouth } = d.parts;
+  const talk = opt.talk ?? -1; // -1이면 말하지 않음
   body.position.y = Math.abs(Math.sin(t * 3)) * 0.04;
   tail.rotation.z = Math.sin(t * 2.2) * 0.12;
   arms[1].rotation.z = opt.wave ? -2.4 + Math.sin(t * 10) * 0.35 : 0.25;
+  arms[0].rotation.z = talk >= 0 ? -0.25 - 0.35 - Math.sin(t * 4.5) * 0.3 : -0.25;
   body.rotation.z = Math.sin(t * 1.5) * 0.04;
+  body.rotation.x = talk >= 0 ? Math.sin(t * 6) * 0.035 : 0;
+  talkMouth.visible = talk > 0.05;
+  talkMouth.scale.y = 0.05 * (0.3 + 0.9 * Math.max(0, talk)); // 기본 높이 0.05
 }
 </script>
 <script type="text/plain" data-mod="./facts.js">// 상식 카드와 퀴즈. 모든 내용의 출처는 docs/퀴즈_출처.md (src 값이 그 문서의 출처 번호).
@@ -897,7 +906,10 @@ function startGame() {
   // 달이 타임: 구름을 타고 나르미 옆으로 날아오는 달이(세상 속에 있는 두 번째 달이)
   const ride = new THREE.Group(), daliW = createDali();
   { const cl = world.makeCloud(0.32); scene.remove(cl); ride.add(cl); daliW.root.position.y = 0.3; daliW.root.scale.setScalar(0.85); ride.add(daliW.root);
-    const l = new THREE.PointLight(0xfff1d6, 5, 6); l.position.set(0, 1.5, -1.5); ride.add(l); }
+  }
+  // 달이 타임 무대 조명: 하늘·도시는 어둡게 두고 캐릭터만 앞쪽 위에서 따뜻하게 비춘다(아래에서 비추면 무서워 보임)
+  const stage = new THREE.DirectionalLight(0xfff0dc, 0); stage.position.set(-2, 7, -9); scene.add(stage, stage.target);
+  const stageFill = new THREE.DirectionalLight(0xcfd8ff, 0); stageFill.position.set(5, 2, -6); scene.add(stageFill, stageFill.target);
   ride.visible = false; scene.add(ride);
   // 방금 겪은 일과 이어 주는 달이의 첫마디(주제별). 뒤에 오는 설명은 출처를 확인한 카드 문장 그대로.
   const TALK = { fair: "아까 피한 먹구름 기억나? 그게 바로 이 이야기야.", sanction: "아까 피한 종이비행기 기억나? 위조 서류였어.",
@@ -1019,27 +1031,34 @@ function startGame() {
     game.rideT = 0; game.rideOut = -1; ride.visible = true;
     audio.music("title"); sfx.note();
     ui.banner("달이 타임", "장애물이 없어요", 1.8);
+    game.daliIdx = i; game.leave = 0;
     ui.daliTalk({ card, intro: TALK[card.topic], rule: i === 0 }, () => {
-      game.rideOut = 0; // 손 흔들며 떠나기
-      game.t = Math.max(game.t, SECTIONS[i + 1].start - 1.2);
-      game.state = "play"; ui.hud(true); player.pose(false);
-      audio.music("play", i + 1);
+      // 나르미가 끄덕이고, 달이가 손 흔들며 떠난 뒤 다음 구간으로
+      player.nod(); sfx.right(); game.rideOut = 0; game.leave = 0.8;
     });
     if (auto) setTimeout(() => ui._daliGo?.(), 500);
+  }
+  function leaveDali() {
+    const i = game.daliIdx;
+    game.t = Math.max(game.t, SECTIONS[i + 1].start - 1.2);
+    game.state = "play"; ui.hud(true); player.pose(false);
+    audio.music("play", i + 1);
   }
   function updateRide(dt) {
     if (!ride.visible) return;
     const t = performance.now() / 1000, home = new THREE.Vector3(player.x + 2.1, -0.75 + Math.sin(t * 1.6) * 0.12, 0.5);
     if (game.rideOut >= 0) {
       game.rideOut += dt; const k = game.rideOut;
-      ride.position.lerp(home.clone().add(new THREE.Vector3(6, 5, -8)), 1 - Math.exp(-dt * 2.2 * (1 + k)));
+      ride.position.lerp(home.clone().add(new THREE.Vector3(4, 6, 7)), 1 - Math.exp(-dt * 1.1 * (1 + k * 2)));
       if (k > 1.6) { ride.visible = false; game.rideOut = -1; }
     } else if (game.rideT >= 0) {
       game.rideT += dt; const k = Math.min(1, game.rideT / 1.3), e = 1 - (1 - k) ** 3;
       ride.position.set(7 + (home.x - 7) * e, 4 + (home.y - 4) * e, -8 + (home.z + 8) * e);
     }
     daliW.root.rotation.y = Math.PI - 0.55; // 카메라(앞쪽)를 보며 나르미 쪽으로 살짝
-    animateDali(daliW, t, { wave: game.rideOut >= 0 || game.rideT < 1.6 });
+    // 말하는 동안 입을 여닫는다: 글자마다 열고, 띄어쓰기·문장부호에서 닫는다
+    const ch = ui.talking, talk = !ch ? -1 : /[\s.,!?·]/.test(ch) ? 0 : 0.45 + 0.55 * Math.abs(Math.sin(t * 17));
+    animateDali(daliW, t, { wave: game.rideOut >= 0 || game.rideT < 1.6, talk });
   }
 
   function daliShow(on) {
@@ -1152,10 +1171,15 @@ function startGame() {
       objects.update(game.t, gdt, player.x, () => game.state === "play" && player.st.inv <= 0);
       world.setTime(q.has("phase") ? +q.get("phase") : phaseAt(game.t));
       if (game.state === "play" && game.t >= TOTAL) finish(true);
-    } else if (st === "dali") speed = 9; // 달이 타임: 시계를 멈추고 천천히 날기만
+    } else if (st === "dali") { // 달이 타임: 시계를 멈추고 천천히 날기만
+      speed = 9;
+      if (game.leave > 0 && (game.leave -= dt) <= 0) leaveDali();
+    }
     else if (st === "result" || st === "title") speed = 10;
     game.night += ((game.state === "dali" ? 1 : 0) - game.night) * (1 - Math.exp(-dt * 2.2));
     world.setNight(game.night);
+    stage.intensity = 2.6 * game.night; stageFill.intensity = 0.9 * game.night;
+    stage.target.position.set(player.x + 1, -0.5, 0); stageFill.target.position.copy(stage.target.position);
     updateRide(dt);
     fx.update(dt, speed);
     for (let i = drops.length - 1; i >= 0; i--) if (!drops[i](dt, speed)) drops.splice(i, 1);
@@ -1178,7 +1202,7 @@ function startGame() {
   };
   if (q.has("manual") || auto) endSplash();
   else { setTimeout(endSplash, Math.max(0, 2600 - (performance.now() - (window.__t0 || 0)))); splash?.addEventListener("pointerdown", endSplash); }
-  window.__game = { game, player, world, step, scene, camera, course, learn, ui, briefing, fly, audio, fx, cam, objects };
+  window.__game = { game, player, world, step, scene, camera, course, learn, ui, briefing, fly, audio, fx, cam, objects, daliW };
   if (auto) briefing(); else showTitle();
   if (!q.has("manual")) {
     let last = performance.now();
@@ -1455,6 +1479,8 @@ export function createPlayer(scene) {
   function revive(inv = 3) { st.crash = -1; st.inv = inv; narmi.root.rotation.set(0, Math.PI, 0); narmi.root.visible = true; }
   // 얼굴 보여 주기 자세(첫 화면·결과): 덜 숙이고 천천히 날갯짓. on=true면 서서히 바뀐다.
   function pose(on) { st.showTo = on ? 1 : 0; }
+  // 고개 끄덕이며 날개 파닥(달이에게 "알겠어!")
+  function nod() { st.nod = 0.8; }
   function reset() { Object.assign(st, { target: 0, x: 0, vx: 0, bank: 0, crash: -1, inv: 0 }); narmi.root.rotation.set(0, Math.PI, 0); narmi.root.visible = true; }
 
   function update(dt, axis = 0) {
@@ -1479,12 +1505,14 @@ export function createPlayer(scene) {
     // 기울 때 고개를 살짝 돌려 옆얼굴이 보이게
     st.show += (st.showTo - st.show) * (1 - Math.exp(-dt * 4));
     const s = st.show;
+    let nodP = 0, nodF = 0;
+    if (st.nod > 0) { st.nod -= dt; const u = 1 - st.nod / 0.8; nodP = Math.sin(u * Math.PI * 4) * 0.22 * (1 - u); nodF = 0.6 * (1 - u); }
     narmi.root.position.y += s * 0.25;
     narmi.root.rotation.y = Math.PI + st.bank * 0.35 + st.look + s * Math.sin(st.t * 0.7) * 0.25;
-    animateNarmi(narmi, st.t, { flap: 1.25 - s * 0.35, flapSpeed: 11 - s * 4, bank: st.bank, pitch: 1.05 - s * 0.75, tuck: 1.4 - s * 0.5 });
+    animateNarmi(narmi, st.t, { flap: 1.25 - s * 0.35 + nodF, flapSpeed: 11 - s * 4 + nodF * 10, bank: st.bank, pitch: 1.05 - s * 0.75 + nodP, tuck: 1.4 - s * 0.5 });
   }
 
-  return { narmi, st, drag, setTarget, update, crash, revive, reset, pose, get x() { return st.x; }, get y() { return narmi.root.position.y; } };
+  return { narmi, st, drag, setTarget, update, crash, revive, reset, pose, nod, get x() { return st.x; }, get y() { return narmi.root.position.y; } };
 }
 </script>
 <script type="text/plain" data-mod="./showcase.js">// 캐릭터 확인용 장면(?view=front|side|back|three|spin). 게임과 별개로 캐릭터만 다듬을 때 쓴다.
@@ -1776,13 +1804,27 @@ export function createUI(opt = {}) {
     daliTalk({ card, intro, rule }, done) {
       const c = screen(`<div class="card left talk" style="box-shadow:none;padding:0;width:auto"><span class="who">달이</span>
         ${rule ? `<div class="rule">🌙 <b>달이 타임</b>에는 장애물이 없어. 손 떼고 천천히 읽어 봐!</div>` : ""}
-        <p class="intro">나르미야, ${esc(intro)}</p>
-        <h3>${esc(card.title)}</h3><p>${esc(card.more)}</p>
+        <p class="intro"></p>
+        <h3>${esc(card.title)}</h3><p class="more"></p>
         <button class="go" style="margin-top:14px">나르미: 알겠어!</button><div class="timer"><b></b></div></div>`, "low");
-      const bar = c.querySelector(".timer b"); let left = 12, closed = false;
-      const go = () => { if (closed) return; closed = true; talkT = null; layer.innerHTML = ""; done(); };
+      // 글자가 달이 입에 맞춰 빠르게 나온다(초당 38자). 카드를 누르면 바로 전부.
+      const lines = [[c.querySelector(".intro"), "나르미야, " + intro], [c.querySelector(".more"), card.more]];
+      const total = lines.reduce((a, l) => a + l[1].length, 0);
+      let shown = 0, left = 14, closed = false;
+      const paint = () => { let n = shown; for (const [el, txt] of lines) { el.textContent = txt.slice(0, Math.max(0, n)); n -= txt.length; } };
+      const reveal = () => { shown = total; paint(); ui.talking = ""; };
+      c.onclick = e => { if (!e.target.closest("button")) reveal(); };
+      const bar = c.querySelector(".timer b");
+      const go = () => { if (closed) return; closed = true; talkT = null; ui.talking = ""; layer.innerHTML = ""; done(); };
       on(c, ".go", go);
-      talkT = dt => { left -= dt; bar.style.width = Math.max(0, left / 12 * 100) + "%"; if (left <= 0) go(); };
+      talkT = dt => {
+        if (shown < total) {
+          shown = Math.min(total, shown + dt * 38); paint();
+          let n = Math.floor(shown), ch = ""; for (const [, txt] of lines) { if (n < txt.length) { ch = txt[n] || ""; break; } n -= txt.length; }
+          ui.talking = shown < total ? (ch || "a") : "";
+        }
+        left -= dt; bar.style.width = Math.max(0, left / 14 * 100) + "%"; if (left <= 0) go();
+      };
       ui._daliGo = go; // 시험용
     },
     // 부활 퀴즈: 10초. done(맞혔는지)
@@ -1845,7 +1887,8 @@ export function createUI(opt = {}) {
         <button class="back">돌아가기</button>`);
       on(c, ".back", onBack);
     },
-    clear() { layer.innerHTML = ""; quizT = null; countT = null; talkT = null; },
+    clear() { layer.innerHTML = ""; quizT = null; countT = null; talkT = null; ui.talking = ""; },
+    talking: "", // 달이가 지금 말하는 글자(입 모양용). 빈 문자열이면 말하지 않음
     get busy() { return layer.childElementCount > 0; },
   };
   return ui;
