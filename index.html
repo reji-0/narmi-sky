@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-20T02:14:30.268Z">
+<meta name="build" content="2026-11-20T03:49:24.046Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -261,32 +261,43 @@ export function animateDali(d, t, opt = {}) {
   body.rotation.z = Math.sin(t * 1.5) * 0.04;
 }
 </script>
-<script type="text/plain" data-mod="./input.js">// 입력: PC는 ←/→, A/D. 폰은 좌우 스와이프, 또는 화면 왼쪽/오른쪽 탭.
-export function createInput(onMove, onTap) {
-  addEventListener("keydown", e => {
-    if (e.repeat) return;
-    if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") { onMove(-1); e.preventDefault(); }
-    else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") { onMove(1); e.preventDefault(); }
-    else if (e.key === " " || e.key === "Enter") { onTap?.(); e.preventDefault(); }
+<script type="text/plain" data-mod="./input.js">// 입력: 자유 이동. 폰은 손가락을 끄는 만큼 따라오고, PC는 ←/→, A/D를 누르고 있는 동안 움직인다.
+// onDrag(비율): 화면 너비 대비 이번에 끈 거리. axis(): 키보드 방향(-1, 0, 1).
+export function createInput(onDrag, onTap) {
+  const held = { l: false, r: false };
+  const key = (e, v) => {
+    const k = e.key;
+    if (k === "ArrowLeft" || k === "a" || k === "A") { held.l = v; e.preventDefault(); }
+    else if (k === "ArrowRight" || k === "d" || k === "D") { held.r = v; e.preventDefault(); }
+    else if (v && !e.repeat && (k === " " || k === "Enter")) { onTap?.(); e.preventDefault(); }
+  };
+  addEventListener("keydown", e => key(e, true));
+  addEventListener("keyup", e => key(e, false));
+  addEventListener("blur", () => { held.l = held.r = false; });
+
+  let down = false, lastX = 0, startX = 0, startT = 0;
+  addEventListener("pointerdown", e => {
+    if (e.target.closest?.(".on")) return;
+    down = true; lastX = startX = e.clientX; startT = performance.now();
   });
-  let sx = 0, sy = 0, st = 0, moved = false;
-  addEventListener("pointerdown", e => { if (e.target.closest?.(".on")) return; sx = e.clientX; sy = e.clientY; st = performance.now(); moved = false; });
   addEventListener("pointermove", e => {
-    if (!st || moved) return;
-    const dx = e.clientX - sx;
-    if (Math.abs(dx) > 28 && Math.abs(dx) > Math.abs(e.clientY - sy)) { onMove(dx > 0 ? 1 : -1); moved = true; }
+    if (!down) return;
+    onDrag((e.clientX - lastX) / innerWidth);
+    lastX = e.clientX;
   });
-  addEventListener("pointerup", e => {
-    if (!st) return;
-    if (!moved && performance.now() - st < 350) {
-      if (onTap?.() !== true) onMove(e.clientX < innerWidth / 2 ? -1 : 1); // 탭: 진행 중이면 그쪽으로 이동
-    }
-    st = 0;
-  });
+  const end = e => {
+    if (!down) return;
+    down = false;
+    if (Math.abs(e.clientX - startX) < 10 && performance.now() - startT < 300) onTap?.();
+  };
+  addEventListener("pointerup", end);
+  addEventListener("pointercancel", end);
+
+  return { axis: () => (held.r ? 1 : 0) - (held.l ? 1 : 0) };
 }
 </script>
 <script type="text/plain" data-mod="./main.js">// 시작점. ?view=… 이면 캐릭터 확인 화면, 아니면 게임.
-// 시험용 주소 옵션: ?phase=0~2 (시간대 고정), ?auto=1 (자동으로 레인 이동), ?manual=1 (프레임을 직접 진행: window.__game.step)
+// 시험용 주소 옵션: ?phase=0~2 (시간대 고정), ?auto=1 (자동으로 좌우 이동), ?manual=1 (프레임을 직접 진행: window.__game.step)
 import * as THREE from "three";
 import { createWorld } from "./world.js";
 import { createPlayer } from "./player.js";
@@ -314,9 +325,9 @@ function startGame() {
   const player = createPlayer(scene);
 
   const game = { speed: 22, time: 0, phase: q.has("phase") ? +q.get("phase") : 0 };
-  createInput(dir => player.move(dir));
+  const input = createInput(r => player.drag(r));
 
-  // 카메라: 나르미 바로 뒤 조금 위에서 따라간다. 레인을 옮기면 카메라도 같은 쪽으로 따라가 여백이 한쪽으로 쏠리지 않게.
+  // 카메라: 나르미 바로 뒤 조금 위에서 따라간다. 좌우로 움직이면 카메라도 같은 쪽으로 따라가 여백이 한쪽으로 쏠리지 않게.
   const camPos = new THREE.Vector3(0, 3.0, 7.0), camLook = new THREE.Vector3();
   function updateCamera(dt) {
     const want = new THREE.Vector3(player.x * 0.8, 3.0, 7.0);
@@ -330,20 +341,19 @@ function startGame() {
     const w = innerWidth, h = innerHeight;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
-    // 세로 화면에서는 시야를 넓혀 레인 3개가 다 보이게
+    // 세로 화면에서는 시야를 넓혀 이동 범위가 다 보이게
     camera.fov = w / h < 1 ? 72 : 58;
     camera.updateProjectionMatrix();
   }
   addEventListener("resize", resize);
   resize();
 
-  let autoT = 0;
   function step(dt) {
     game.time += dt;
-    if (q.has("auto")) { autoT -= dt; if (autoT <= 0) { autoT = 0.9; player.move(Math.random() < 0.5 ? -1 : 1) || player.move(player.st.lane === 0 ? 1 : -1); } }
+    if (q.has("auto")) player.setTarget(Math.sin(game.time * 0.9) * 4.2);
     world.setTime(game.phase);
     world.update(dt, game.speed, player.x);
-    player.update(dt);
+    player.update(dt, input.axis());
     updateCamera(dt);
     renderer.render(scene, camera);
   }
@@ -359,11 +369,13 @@ function startGame() {
   window.__ready = true;
 }
 </script>
-<script type="text/plain" data-mod="./player.js">// 나르미 조종: 3레인 이동, 기울기, 날갯짓. 충돌용 위치(x, y)를 내준다.
+<script type="text/plain" data-mod="./player.js">// 나르미 조종: 좌우 자유 이동(양 끝 한계만 있음), 기울기, 날갯짓. 충돌용 위치(x)를 내준다.
 import * as THREE from "three";
 import { createNarmi, animateNarmi } from "./characters.js";
 
-export const LANES = [-3, 0, 3];
+export const X_LIMIT = 4.2;   // 이동 한계: -4.2 ~ 4.2
+const DRAG_GAIN = 14;         // 화면 너비만큼 끌면 14만큼 이동 (끝에서 끝까지 화면 약 60%)
+const KEY_SPEED = 11;         // 키를 누르고 있을 때 초당 이동량
 
 export function createPlayer(scene) {
   const narmi = createNarmi();
@@ -371,30 +383,29 @@ export function createPlayer(scene) {
   narmi.root.scale.setScalar(0.8);
   scene.add(narmi.root);
 
-  const st = { lane: 1, x: 0, vx: 0, t: 0, bank: 0, look: 0 };
+  const st = { target: 0, x: 0, vx: 0, t: 0, bank: 0, look: 0 };
+  const clampX = v => THREE.MathUtils.clamp(v, -X_LIMIT, X_LIMIT);
 
-  function move(dir) {
-    const next = THREE.MathUtils.clamp(st.lane + dir, 0, 2);
-    if (next === st.lane) return false;
-    st.lane = next;
-    return true;
-  }
+  // 손가락으로 끈 만큼 목표 위치를 옮긴다
+  function drag(ratio) { st.target = clampX(st.target + ratio * DRAG_GAIN); }
+  // 목표 위치를 직접 정한다 (자동 시연용)
+  function setTarget(x) { st.target = clampX(x); }
 
-  function update(dt) {
+  function update(dt, axis = 0) {
     st.t += dt;
-    const target = LANES[st.lane];
-    // 스프링으로 레인 사이를 옮긴다 (빠르지만 부드럽게)
-    const k = 120, d = 18;
-    st.vx += ((target - st.x) * k - st.vx * d) * dt;
+    if (axis) st.target = clampX(st.target + axis * KEY_SPEED * dt);
+    // 스프링으로 목표를 따라간다. 손가락보다 살짝 늦게 따라와 날아가는 느낌이 나게.
+    const k = 160, d = 24;
+    st.vx += ((st.target - st.x) * k - st.vx * d) * dt;
     st.x += st.vx * dt;
-    st.bank = THREE.MathUtils.lerp(st.bank, THREE.MathUtils.clamp(-st.vx / 14, -1, 1), 1 - Math.exp(-dt * 12));
+    st.bank = THREE.MathUtils.lerp(st.bank, THREE.MathUtils.clamp(-st.vx / 12, -1, 1), 1 - Math.exp(-dt * 12));
     narmi.root.position.set(st.x, -0.9 + Math.sin(st.t * 2.1) * 0.12, 0); // 숙이면 몸 중심이 올라가므로 내려 맞춘다
     // 기울 때 고개를 살짝 돌려 옆얼굴이 보이게
     narmi.root.rotation.y = Math.PI + st.bank * 0.35 + st.look;
     animateNarmi(narmi, st.t, { flap: 1.25, flapSpeed: 11, bank: st.bank, pitch: 1.05, tuck: 1.4 });
   }
 
-  return { narmi, st, move, update, get x() { return st.x; } };
+  return { narmi, st, drag, setTarget, update, get x() { return st.x; } };
 }
 </script>
 <script type="text/plain" data-mod="./showcase.js">// 캐릭터 확인용 장면(?view=front|side|back|three|spin). 게임과 별개로 캐릭터만 다듬을 때 쓴다.
