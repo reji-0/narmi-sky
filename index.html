@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-20T03:49:24.046Z">
+<meta name="build" content="2026-11-20T04:00:41.967Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -296,12 +296,135 @@ export function createInput(onDrag, onTap) {
   return { axis: () => (held.r ? 1 : 0) - (held.l ? 1 : 0) };
 }
 </script>
+<script type="text/plain" data-mod="./level.js">// 90초 코스 대본. 몇 초에 어느 x에 무엇이 나오는지 미리 정한다(시드 고정, 매판 같은 코스).
+// 화면에는 레인이 없지만, 배치는 보이지 않는 5줄(SLOTS)에 맞춰 피할 길이 항상 있게 한다.
+
+export const SLOTS = [-3.6, -1.8, 0, 1.8, 3.6];
+
+// 구간: 아침 → 낮 → 노을. 구간 사이 3초는 쉬는 시간(나중에 달이의 정리 화면).
+export const SECTIONS = [
+  { name: "아침", start: 0, end: 28, speed: 22, phase: 0 },
+  { name: "낮", start: 31, end: 59, speed: 26, phase: 1 },
+  { name: "노을", start: 62, end: 90, speed: 31, phase: 2 },
+];
+export const TOTAL = 90;
+
+// 시각 t의 속도. 쉬는 시간에는 다음 구간 속도로 서서히 올린다.
+export function speedAt(t) {
+  for (let i = 0; i < SECTIONS.length; i++) {
+    const s = SECTIONS[i];
+    if (t <= s.end) {
+      if (t >= s.start || i === 0) return s.speed;
+      const p = SECTIONS[i - 1], k = (t - p.end) / (s.start - p.end);
+      return p.speed + (s.speed - p.speed) * k;
+    }
+  }
+  return SECTIONS[SECTIONS.length - 1].speed;
+}
+
+// 하늘색 단계(0~2). 쉬는 시간에 다음 시간대로 넘어간다.
+export function phaseAt(t) {
+  for (let i = 1; i < SECTIONS.length; i++) {
+    const p = SECTIONS[i - 1], s = SECTIONS[i];
+    if (t < p.end) return p.phase;
+    if (t < s.start) return p.phase + (t - p.end) / (s.start - p.end);
+  }
+  return SECTIONS[SECTIONS.length - 1].phase;
+}
+
+export function sectionAt(t) {
+  for (let i = 0; i < SECTIONS.length; i++) if (t < SECTIONS[i].end) return i;
+  return SECTIONS.length - 1;
+}
+
+// 시간 → 이동 거리 표 (0.01초 단위로 적분)
+const DT = 0.01, DIST = [0];
+for (let t = 0; t < TOTAL + 5; t += DT) DIST.push(DIST[DIST.length - 1] + speedAt(t) * DT);
+export function distAt(t) {
+  const i = Math.max(0, Math.min(DIST.length - 2, Math.floor(t / DT))), f = t / DT - i;
+  return DIST[i] + (DIST[i + 1] - DIST[i]) * f;
+}
+
+// 배송지: 구간마다 두 곳
+export const ORDERS = [
+  ["school", "library"],
+  ["fire", "health"],
+  ["school", "health"],
+];
+
+// 코스 만들기. 항목: { t, type, x, ... }
+//   box(일반) · innov(혁신제품) · sme(중소기업) · cloud(담합 먹구름) · plane(위조 서류 종이비행기, x는 도착 위치) · ring(배송 링, org)
+export function buildCourse(seed = 20261122) {
+  let s = seed;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const ri = n => Math.floor(rnd() * n);
+  const items = [];
+  const add = (t, type, slot, extra = {}) => items.push({ t: +t.toFixed(3), type, x: SLOTS[slot], slot, ...extra });
+
+  SECTIONS.forEach((sec, si) => {
+    const diff = si; // 0 쉬움, 1 보통, 2 어려움
+    const gap = [0.75, 0.6, 0.5][diff];
+    const ringTimes = [sec.start + 11, sec.start + 23];
+    let ringIdx = 0;
+    let t = sec.start + (si === 0 ? 3 : 1.2);
+    let free = 2; // 직전 패턴에서 비어 있던 줄(여기서 너무 멀리 떨어진 곳만 길로 남기지 않게)
+    let smeLeft = si === 0 ? 1 : 2; // 구간마다 중소기업 상자 줄 수
+
+    while (t < sec.end - 1.2) {
+      // 배송 링 차례: 같은 줄에 상자 3개를 놓아 링으로 이끈다
+      if (ringIdx < 2 && t >= ringTimes[ringIdx] - 1.4) {
+        const slot = clampSlot(free + ri(3) - 1);
+        for (let k = 0; k < 3; k++) add(t + k * 0.22, k === 2 && rnd() < 0.5 ? "innov" : "box", slot);
+        add(t + 1.2, "ring", slot, { org: ORDERS[si][ringIdx] });
+        free = slot; ringIdx++;
+        t += 1.2 + gap + 0.4;
+        continue;
+      }
+
+      const r = rnd();
+      if (r < 0.34) {
+        // 상자 줄: 4개. 가끔 끝에 혁신제품, 구간마다 몇 번은 중소기업 상자 줄
+        const slot = clampSlot(free + ri(5) - 2);
+        const sme = smeLeft > 0 && rnd() < 0.4;
+        if (sme) smeLeft--;
+        for (let k = 0; k < 4; k++) add(t + k * 0.22, sme ? "sme" : (k === 3 && rnd() < 0.3 ? "innov" : "box"), slot);
+        free = slot; t += 0.9 + gap;
+      } else if (r < 0.8 || diff === 0) {
+        // 먹구름 줄: 구간이 뒤로 갈수록 많이. 빈 줄 중 하나는 직전 길에서 두 칸 안쪽.
+        const n = Math.min(3, 1 + ri(diff + 1) + (diff === 2 ? 1 : 0));
+        const open = clampSlot(free + ri(5) - 2);
+        const cand = [0, 1, 2, 3, 4].filter(i => i !== open);
+        shuffle(cand, rnd);
+        const blocked = cand.slice(0, n);
+        blocked.forEach(b => add(t, "cloud", b));
+        // 빈 줄에 상자 하나를 놓아 길을 알려 준다
+        if (rnd() < 0.6) add(t, rnd() < 0.15 ? "innov" : "box", open);
+        free = open; t += 0.45 + gap;
+      } else {
+        // 위조 서류 종이비행기: 옆에서 날아와 정해진 줄을 지나간다
+        const slot = clampSlot(free + (rnd() < 0.5 ? -1 : 1) * (1 + ri(2)));
+        const from = slot <= 2 ? 1 : -1; // 오른쪽 줄이면 왼쪽에서 날아옴
+        add(t, "plane", slot, { from });
+        t += 0.6 + gap;
+      }
+    }
+  });
+  items.sort((a, b) => a.t - b.t);
+  return items;
+}
+
+function clampSlot(i) { return Math.max(0, Math.min(4, i)); }
+function shuffle(a, rnd) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } }
+</script>
 <script type="text/plain" data-mod="./main.js">// 시작점. ?view=… 이면 캐릭터 확인 화면, 아니면 게임.
-// 시험용 주소 옵션: ?phase=0~2 (시간대 고정), ?auto=1 (자동으로 좌우 이동), ?manual=1 (프레임을 직접 진행: window.__game.step)
+// 시험용 주소 옵션: ?phase=0~2 (시간대 고정), ?auto=1 (자동 플레이), ?manual=1 (프레임을 직접 진행: window.__game.step)
 import * as THREE from "three";
 import { createWorld } from "./world.js";
 import { createPlayer } from "./player.js";
 import { createInput } from "./input.js";
+import { createUI } from "./ui.js";
+import { buildCourse, SECTIONS, TOTAL, speedAt, phaseAt, sectionAt, SLOTS } from "./level.js";
+import { createObjects, dropBox, ORG_NAMES } from "./objects.js";
 
 const q = new URLSearchParams(location.search);
 if (q.has("view")) {
@@ -309,6 +432,9 @@ if (q.has("view")) {
 } else {
   startGame();
 }
+
+const VALUE = { box: 10, sme: 10, innov: 20 }; // 배달할 때 상자 한 개 점수
+const RING_BONUS = 20, SME_BONUS = 30;
 
 function startGame() {
   const canvas = document.getElementById("gl");
@@ -323,9 +449,75 @@ function startGame() {
   const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 600);
   const world = createWorld(scene, renderer);
   const player = createPlayer(scene);
+  const ui = createUI();
+  const course = buildCourse();
+  const rings = course.filter(i => i.type === "ring").length;
+  const auto = q.has("auto");
 
-  const game = { speed: 22, time: 0, phase: q.has("phase") ? +q.get("phase") : 0 };
-  const input = createInput(r => player.drag(r));
+  // state: ready(시작 화면) · play · crash · result
+  const game = { state: "ready", t: 0, slow: 1, score: 0, cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1, done: new Set(), endT: 0 };
+  const drops = [];
+  const objects = createObjects(scene, course, onEvent);
+  const input = createInput(r => game.state === "play" && player.drag(r));
+
+  function onEvent(kind, it) {
+    if (kind === "pick") {
+      game.cargo.push(it.type); game.boxes++;
+      if (it.type === "sme" && ++game.sme % 3 === 0) { game.score += SME_BONUS; ui.toast(`중소기업 상자 3개 모음 +${SME_BONUS}`); }
+      else ui.toast(it.type === "innov" ? "혁신제품 상자! 배달하면 2배" : it.type === "sme" ? "중소기업 상자" : "조달 상자 +1", 1.0);
+    } else if (kind === "ring") {
+      game.done.add(it);
+      if (!game.cargo.length) { ui.toast(`${ORG_NAMES[it.org]}: 상자가 없어요`); return; }
+      const pts = game.cargo.reduce((a, c) => a + VALUE[c], 0) + RING_BONUS;
+      game.score += pts; game.delivered++;
+      game.innov += game.cargo.filter(c => c === "innov").length;
+      drops.push(dropBox(scene, player.x, game.cargo.includes("innov") ? "innov" : "box"));
+      ui.toast(`${ORG_NAMES[it.org]} 배달 완료 +${pts}`, 1.8);
+      game.cargo = [];
+    } else if (kind === "miss") {
+      game.done.add(it);
+      ui.toast(`${ORG_NAMES[it.org]}을(를) 지나쳤어요`);
+    } else if (kind === "hit") {
+      game.state = "crash"; game.endT = 0;
+      player.crash(); ui.flash();
+      ui.toast(it.type === "cloud" ? "담합 먹구름에 부딪혔어요" : "위조 서류에 부딪혔어요", 2);
+    }
+    ui.setScore(game.score); ui.setCargo(game.cargo);
+  }
+
+  function begin() {
+    objects.reset(); player.reset();
+    Object.assign(game, { state: "play", t: 0, slow: 1, score: 0, cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1, done: new Set(), endT: 0 });
+    ui.setScore(0); ui.setCargo([]); ui.hud(true);
+  }
+
+  function finish(cleared) {
+    game.state = "result"; ui.hud(false);
+    const r = game.delivered;
+    const grade = cleared && r === rings && game.innov >= 2 ? "S" : r >= rings - 1 ? "A" : r >= rings / 2 ? "B" : "C";
+    ui.result({ title: cleared ? "오늘의 배송 끝!" : "배송 중에 쓰러졌어요", grade, score: game.score, delivered: r, rings, innov: game.innov, boxes: game.boxes }, begin);
+  }
+
+  function orgsLeft(si) {
+    return course.filter(i => i.type === "ring" && sectionAt(i.t) === si && !game.done.has(i)).map(i => ORG_NAMES[i.org]).join(" · ") || "배달 끝";
+  }
+
+  // 자동 플레이: 앞으로 1.6초 안에 오는 물건을 보고 가장 좋은 줄로 간다
+  function autoPilot() {
+    const up = objects.upcoming(game.t, 1.6);
+    let best = player.x, bestV = -1e9;
+    for (const x of [...SLOTS, player.x]) {
+      let v = -Math.abs(x - player.x) * 0.3;
+      for (const it of up) {
+        const soon = it.t - game.t, w = 1 / (0.3 + soon), dx = Math.abs(it.x - x);
+        if ((it.type === "cloud" || it.type === "plane") && dx < 1.6 && soon < 0.9) v -= 100 * w;
+        else if (it.type === "ring" && dx < 1.2) v += 8 * w;
+        else if ((it.type === "box" || it.type === "sme" || it.type === "innov") && dx < 1.0) v += (it.type === "innov" ? 4 : 2) * w;
+      }
+      if (v > bestV) { bestV = v; best = x; }
+    }
+    player.setTarget(best);
+  }
 
   // 카메라: 나르미 바로 뒤 조금 위에서 따라간다. 좌우로 움직이면 카메라도 같은 쪽으로 따라가 여백이 한쪽으로 쏠리지 않게.
   const camPos = new THREE.Vector3(0, 3.0, 7.0), camLook = new THREE.Vector3();
@@ -349,17 +541,42 @@ function startGame() {
   resize();
 
   function step(dt) {
-    game.time += dt;
-    if (q.has("auto")) player.setTarget(Math.sin(game.time * 0.9) * 4.2);
-    world.setTime(game.phase);
-    world.update(dt, game.speed, player.x);
-    player.update(dt, input.axis());
+    let speed = SECTIONS[0].speed;
+    if (game.state === "play" || game.state === "crash") {
+      // 쓰러지면 세상이 느려지다 멈춘다 (물건과 도시가 같은 시계로 움직이게 game.t도 함께 늦춘다)
+      if (game.state === "crash") { game.slow = Math.max(0, game.slow - dt * 2.5); game.endT += dt; }
+      const gdt = dt * game.slow;
+      game.t += gdt;
+      speed = speedAt(game.t) * game.slow;
+      const si = sectionAt(game.t);
+      if (game.state === "play") {
+        if (auto) autoPilot();
+        if (si !== game.section && game.t >= SECTIONS[si].start) {
+          game.section = si;
+          ui.banner(SECTIONS[si].name, si === 0 ? `${orgsLeft(0)}에 배달해요` : si === 1 ? "먹구름이 많아져요" : "속도가 빨라져요");
+        }
+        ui.setSection(SECTIONS[si].name, orgsLeft(si));
+        ui.setProgress(game.t / TOTAL);
+      }
+      objects.update(game.t, gdt, player.x, () => game.state === "play" && player.st.inv <= 0);
+      world.setTime(q.has("phase") ? +q.get("phase") : phaseAt(game.t));
+      if (game.state === "play" && game.t >= TOTAL) finish(true);
+      else if (game.state === "crash" && game.endT > 1.6) finish(false);
+    } else {
+      if (game.state === "result") speed = 8;
+    }
+    for (let i = drops.length - 1; i >= 0; i--) if (!drops[i](dt, speed)) drops.splice(i, 1);
+    world.update(dt, speed, player.x);
+    player.update(dt, game.state === "play" ? input.axis() : 0);
     updateCamera(dt);
+    ui.update(dt);
     renderer.render(scene, camera);
   }
 
+  world.setTime(q.has("phase") ? +q.get("phase") : 0);
   document.getElementById("boot").style.display = "none";
-  window.__game = { game, player, world, step, scene, camera };
+  window.__game = { game, player, world, step, scene, camera, course, begin };
+  if (auto || q.has("manual")) begin(); else ui.start(begin);
   if (!q.has("manual")) {
     let last = performance.now();
     renderer.setAnimationLoop(now => { const dt = Math.min((now - last) / 1000, 1 / 20); last = now; step(dt); });
@@ -367,6 +584,228 @@ function startGame() {
     for (let i = 0; i < 30; i++) step(1 / 30);
   }
   window.__ready = true;
+}
+</script>
+<script type="text/plain" data-mod="./objects.js">// 코스 위의 물건들: 상자 3종, 담합 먹구름, 위조 서류 종이비행기, 배송 링과 아래 수요기관 건물.
+// 대본(level.js)의 시각을 거리로 바꿔, 나르미 앞 SPAWN 거리 안에 들어오면 만들고 지나가면 치운다.
+import * as THREE from "three";
+import { distAt } from "./level.js";
+import { GROUND_Y } from "./world.js";
+
+const SPAWN = 150;      // 이만큼 앞에서 나타난다
+const PLANE_VX = 7;     // 종이비행기 옆 속도
+export const ORG_NAMES = { school: "학교", fire: "소방서", health: "보건소", library: "도서관" };
+
+const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.7, ...o });
+const boxG = new THREE.BoxGeometry(1, 1, 1), sphG = new THREE.SphereGeometry(1, 14, 10);
+
+// 둥근 모서리 판 글자 (기관 이름표)
+function labelTexture(text, bg = "#ff8a1f", fg = "#ffffff") {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 160;
+  const g = c.getContext("2d");
+  g.fillStyle = bg; g.beginPath(); g.roundRect(8, 8, 496, 144, 72); g.fill();
+  g.fillStyle = fg; g.font = "800 92px 'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif";
+  g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(text, 256, 86);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function glowTexture(rgb) {
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const g = c.getContext("2d"), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, `rgba(${rgb},0.9)`); gr.addColorStop(0.4, `rgba(${rgb},0.35)`); gr.addColorStop(1, `rgba(${rgb},0)`);
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
+// ── 모델 ──────────────────────────────────────────────
+const M = {
+  kraft: std(0xc89a62), tape: std(0xead7b0), label: std(0x2f7fd1),
+  white: std(0xffffff, { emissive: 0xfff4d6, emissiveIntensity: 0.35 }), gold: std(0xf2b84b, { metalness: 0.3, roughness: 0.4, emissive: 0xf2a33b, emissiveIntensity: 0.3 }),
+  sme: std(0x4fae6a), smeBand: std(0xf4fbf2),
+  cloud: std(0x5d6474, { roughness: 1 }), cloudDark: std(0x434958, { roughness: 1 }), bolt: std(0xffd23f, { emissive: 0xffc300, emissiveIntensity: 0.6 }),
+  eye: new THREE.MeshBasicMaterial({ color: 0xffffff }), pupil: new THREE.MeshBasicMaterial({ color: 0x1b1f27 }),
+  paper: std(0xfbfaf6, { side: THREE.DoubleSide, roughness: 0.9 }), stamp: new THREE.MeshBasicMaterial({ color: 0xd8342c, side: THREE.DoubleSide }),
+  ring: std(0xff8a1f, { emissive: 0xff7a00, emissiveIntensity: 0.55, roughness: 0.4 }),
+  beam: new THREE.MeshBasicMaterial({ color: 0xffa64d, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }),
+};
+const goldGlow = glowTexture("255,206,90"), ringGlow = glowTexture("255,150,60");
+
+function makeBox(type) {
+  const g = new THREE.Group();
+  const [body, band, mark] = type === "innov" ? [M.white, M.gold, M.gold] : type === "sme" ? [M.sme, M.smeBand, M.smeBand] : [M.kraft, M.tape, M.label];
+  const b = new THREE.Mesh(boxG, body); b.scale.setScalar(1.05); b.castShadow = true; g.add(b);
+  const t1 = new THREE.Mesh(boxG, band); t1.scale.set(1.08, 1.08, 0.22); g.add(t1);
+  const t2 = new THREE.Mesh(boxG, band); t2.scale.set(0.22, 1.08, 1.08); g.add(t2);
+  const m = new THREE.Mesh(boxG, mark); m.scale.set(0.36, 0.36, 0.04); m.position.set(0.3, -0.22, 0.54); g.add(m);
+  if (type === "innov") {
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: goldGlow, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    halo.scale.setScalar(3.4); g.add(halo);
+    const sp = new THREE.Group(); g.add(sp); g.userData.spark = sp;
+    const octa = new THREE.OctahedronGeometry(0.14);
+    for (let i = 0; i < 4; i++) { const s = new THREE.Mesh(octa, M.gold); const a = i * Math.PI / 2; s.position.set(Math.cos(a) * 1.1, (i % 2 ? 0.4 : -0.3), Math.sin(a) * 1.1); sp.add(s); }
+  }
+  g.scale.setScalar(0.9);
+  return g;
+}
+
+function makeCloud() {
+  const g = new THREE.Group();
+  const puffs = [[-0.75, 0, 0, 0.62], [0, 0.22, 0, 0.78], [0.75, 0, 0, 0.6], [-0.3, -0.25, 0.25, 0.5], [0.35, -0.25, 0.25, 0.5]];
+  for (const [x, y, z, r] of puffs) { const p = new THREE.Mesh(sphG, y > 0.1 ? M.cloud : M.cloudDark); p.position.set(x, y, z); p.scale.set(r * 1.15, r, r); p.castShadow = true; g.add(p); }
+  // 찡그린 눈: 뒤에서 보이도록 +z 쪽에
+  for (const s of [-1, 1]) {
+    const e = new THREE.Mesh(sphG, M.eye); e.scale.set(0.16, 0.12, 0.05); e.position.set(s * 0.28, 0.12, 0.74); g.add(e);
+    const p = new THREE.Mesh(sphG, M.pupil); p.scale.set(0.07, 0.07, 0.03); p.position.set(s * 0.25, 0.1, 0.78); g.add(p);
+    const brow = new THREE.Mesh(boxG, M.pupil); brow.scale.set(0.26, 0.05, 0.03); brow.position.set(s * 0.28, 0.27, 0.78); brow.rotation.z = s * 0.45; g.add(brow);
+  }
+  // 번개
+  const shape = new THREE.Shape([[0, 0], [0.22, 0], [0.08, -0.32], [0.26, -0.32], [-0.12, -0.8], [0, -0.42], [-0.16, -0.42]].map(([x, y]) => new THREE.Vector2(x, y)));
+  const bolt = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: false }), M.bolt);
+  bolt.position.set(0.15, -0.45, 0.3); g.add(bolt); g.userData.bolt = bolt;
+  return g;
+}
+
+function makePlane() {
+  const g = new THREE.Group();
+  // 종이비행기: 앞(-x 방향이 코)으로 접힌 두 날개
+  const geo = new THREE.BufferGeometry();
+  const v = [
+    -1.2, 0, 0, 0.9, 0.05, -0.75, 0.9, 0, 0,   // 왼날개
+    -1.2, 0, 0, 0.9, 0, 0, 0.9, 0.05, 0.75,    // 오른날개
+    -1.2, 0, 0, 0.9, 0, 0, 0.9, -0.38, 0,      // 용골
+  ];
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, M.paper); m.castShadow = true; g.add(m);
+  // 빨간 "위조" 도장 (날개 위)
+  const st = new THREE.Mesh(new THREE.CircleGeometry(0.2, 20), M.stamp); st.rotation.x = -Math.PI / 2; st.position.set(0.35, 0.04, 0.3); g.add(st);
+  const st2 = st.clone(); st2.position.z = -0.3; g.add(st2);
+  g.scale.setScalar(1.15);
+  return g;
+}
+
+function makeRing(org) {
+  const g = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.17, 12, 40), M.ring); g.add(ring);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: ringGlow, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.6 }));
+  glow.scale.setScalar(5); g.add(glow);
+  const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture(ORG_NAMES[org]), transparent: true, depthWrite: false }));
+  label.scale.set(2.6, 0.81, 1); label.position.y = 2.6; g.add(label);
+  // 아래 건물까지 이어지는 빛 기둥
+  const h = -GROUND_Y - 1.8;
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.6, h, 16, 1, true), M.beam);
+  beam.position.y = -1.8 - h / 2; g.add(beam);
+  const b = makeBuilding(org); b.position.y = GROUND_Y; g.add(b);
+  g.userData.ring = ring; g.userData.label = label; g.userData.glow = glow;
+  return g;
+}
+
+function makeBuilding(org) {
+  const g = new THREE.Group();
+  const add = (mat, sx, sy, sz, x, y, z) => { const m = new THREE.Mesh(boxG, mat); m.scale.set(sx, sy, sz); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; g.add(m); return m; };
+  const plaza = add(std(0xd9d4c7), 18, 0.2, 14, 0, 0.1, 0);
+  plaza.castShadow = false;
+  if (org === "school") {
+    const wall = std(0xf6ecd6), roof = std(0xd9573f);
+    add(wall, 14, 6, 6, 0, 3.2, -2); add(roof, 14.6, 0.6, 6.6, 0, 6.5, -2);
+    add(wall, 4, 8.5, 4, 0, 4.4, 1.5); add(roof, 4.6, 0.6, 4.6, 0, 8.9, 1.5);
+    const clock = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.2, 24), std(0xffffff)); clock.rotation.x = Math.PI / 2; clock.position.set(0, 7, 3.55); g.add(clock);
+    add(std(0x2a3442), 0.12, 0.8, 0.08, 0, 7.25, 3.68); add(std(0x2a3442), 0.6, 0.12, 0.08, 0.25, 7, 3.68);
+    add(std(0xcccccc), 0.15, 7, 0.15, 6, 3.6, 4); add(std(0x2f7fd1), 1.6, 1, 0.08, 6.8, 6.6, 4);
+  } else if (org === "fire") {
+    const red = std(0xd8342c), white = std(0xf7f3ea);
+    add(red, 12, 7, 8, -1, 3.6, 0); add(white, 12.4, 0.5, 8.4, -1, 7.3, 0);
+    for (let i = 0; i < 3; i++) add(white, 2.6, 3.6, 0.1, -4.6 + i * 3.4, 2, 4.05);
+    add(red, 3, 11, 3, 6.5, 5.6, 1); add(white, 3.4, 0.5, 3.4, 6.5, 11.3, 1);
+  } else if (org === "health") {
+    const white = std(0xfafafa), green = std(0x2fa66a, { emissive: 0x1d8a52, emissiveIntensity: 0.25 });
+    add(white, 12, 6, 9, 0, 3.2, 0); add(std(0xcfe8dc), 12.4, 0.5, 9.4, 0, 6.4, 0);
+    add(green, 4.6, 0.3, 1.4, 0, 6.8, 0); add(green, 1.4, 0.3, 4.6, 0, 6.8, 0);
+    add(green, 2.2, 0.7, 0.1, 0, 4.4, 4.55); add(green, 0.7, 2.2, 0.1, 0, 4.4, 4.55);
+  } else {
+    const wall = std(0x7fb3a8), roof = std(0x3d6e66);
+    add(wall, 13, 6, 8, 0, 3.2, 0); add(roof, 13.6, 0.5, 8.6, 0, 6.4, 0);
+    const books = [0xe76f51, 0xf2b84b, 0x2f7fd1, 0x7fb069, 0xffffff];
+    for (let i = 0; i < 5; i++) add(std(books[i]), 1.2, 3.2 - (i % 2) * 0.6, 4, -3.6 + i * 1.6, 8.2 - (i % 2) * 0.3, 0);
+  }
+  g.scale.setScalar(0.9);
+  return g;
+}
+
+// ── 실행 ─────────────────────────────────────────────
+// onEvent(kind, item): "pick"(상자), "hit"(장애물), "ring"(링 통과), "miss"(링을 놓침)
+export function createObjects(scene, course, onEvent) {
+  let next = 0;
+  const live = [];
+
+  function reset() {
+    for (const o of live) scene.remove(o.mesh);
+    live.length = 0; next = 0;
+  }
+
+  function spawn(item) {
+    const mesh = item.type === "cloud" ? makeCloud() : item.type === "plane" ? makePlane() : item.type === "ring" ? makeRing(item.org) : makeBox(item.type);
+    mesh.position.set(item.x, 0, -999);
+    scene.add(mesh);
+    live.push({ item, mesh, d: distAt(item.t), done: false, phase: Math.random() * 6 });
+  }
+
+  // t: 게임 시각, px: 나르미 x, canHit: 무적이 아니면 true
+  function update(t, dt, px, canHit) {
+    const D = distAt(t);
+    while (next < course.length && distAt(course[next].t) - D < SPAWN) spawn(course[next++]);
+    for (let i = live.length - 1; i >= 0; i--) {
+      const o = live[i], it = o.item, m = o.mesh;
+      const z = -(o.d - D);              // 나르미 기준 앞쪽은 음수
+      const tLeft = it.t - t;            // 나르미 위치에 닿기까지 남은 초
+      m.position.z = z;
+      o.phase += dt;
+      if (it.type === "plane") {
+        // 도착 시각에 정해진 줄(it.x)을 지나도록 옆에서 날아온다
+        m.position.x = it.x + it.from * PLANE_VX * tLeft;
+        m.rotation.y = it.from > 0 ? 0 : Math.PI;
+        m.rotation.z = Math.sin(o.phase * 6) * 0.08;
+        m.position.y = 0.15 + Math.sin(o.phase * 3) * 0.15;
+      } else if (it.type === "cloud") {
+        m.position.y = Math.sin(o.phase * 1.7 + it.x) * 0.15;
+        m.userData.bolt.visible = Math.sin(o.phase * 9) > -0.2;
+      } else if (it.type === "ring") {
+        m.userData.ring.rotation.z += dt * 0.6;
+        m.position.y = 0;
+        // 가까워지면 이름표와 빛을 흐리게 (카메라 앞을 가리지 않게)
+        const fade = THREE.MathUtils.clamp((-z - 4) / 10, 0, 1);
+        m.userData.label.material.opacity = fade; m.userData.glow.material.opacity = 0.6 * fade;
+      } else {
+        m.rotation.y += dt * 1.6; m.position.y = 0.1 + Math.sin(o.phase * 3) * 0.18;
+        if (m.userData.spark) m.userData.spark.rotation.y -= dt * 3;
+      }
+
+      // 판정: 나르미 위치(z=0)를 지나는 순간 한 번
+      if (!o.done && tLeft <= 0) {
+        o.done = true;
+        const dx = Math.abs(m.position.x - px);
+        if (it.type === "ring") onEvent(dx < 1.6 ? "ring" : "miss", it);
+        else if (it.type === "cloud") { if (canHit() && dx < 1.25) onEvent("hit", it); }
+        else if (it.type === "plane") { if (canHit() && dx < 1.05) onEvent("hit", it); }
+        else if (dx < 1.3) { onEvent("pick", it); scene.remove(m); live.splice(i, 1); continue; }
+      }
+      if (z > 12) { scene.remove(m); live.splice(i, 1); }
+    }
+  }
+
+  // 자동 플레이용: 앞으로 secs초 안에 오는 물건
+  function upcoming(t, secs) { return live.filter(o => !o.done && o.item.t - t > -0.05 && o.item.t - t < secs).map(o => o.item); }
+
+  return { update, reset, upcoming };
+}
+
+// 배달 연출: 나르미에서 상자가 떨어져 아래 건물로
+export function dropBox(scene, x, type) {
+  const m = makeBox(type); m.position.set(x, -0.6, 0); scene.add(m);
+  let vy = -2, life = 0;
+  return (dt, speed) => {
+    life += dt; vy -= 30 * dt; m.position.y += vy * dt; m.position.z += speed * dt; m.rotation.x += dt * 4;
+    if (m.position.y < GROUND_Y + 3 || life > 3) { scene.remove(m); return false; }
+    return true;
+  };
 }
 </script>
 <script type="text/plain" data-mod="./player.js">// 나르미 조종: 좌우 자유 이동(양 끝 한계만 있음), 기울기, 날갯짓. 충돌용 위치(x)를 내준다.
@@ -383,7 +822,7 @@ export function createPlayer(scene) {
   narmi.root.scale.setScalar(0.8);
   scene.add(narmi.root);
 
-  const st = { target: 0, x: 0, vx: 0, t: 0, bank: 0, look: 0 };
+  const st = { target: 0, x: 0, vx: 0, t: 0, bank: 0, look: 0, crash: -1, inv: 0 };
   const clampX = v => THREE.MathUtils.clamp(v, -X_LIMIT, X_LIMIT);
 
   // 손가락으로 끈 만큼 목표 위치를 옮긴다
@@ -391,8 +830,23 @@ export function createPlayer(scene) {
   // 목표 위치를 직접 정한다 (자동 시연용)
   function setTarget(x) { st.target = clampX(x); }
 
+  // 쓰러짐: 빙글 돌며 아래로. revive()로 되살리면 inv초 동안 깜빡이며 무적.
+  function crash() { st.crash = 0; }
+  function revive(inv = 3) { st.crash = -1; st.inv = inv; narmi.root.rotation.set(0, Math.PI, 0); }
+  function reset() { Object.assign(st, { target: 0, x: 0, vx: 0, bank: 0, crash: -1, inv: 0 }); narmi.root.rotation.set(0, Math.PI, 0); narmi.root.visible = true; }
+
   function update(dt, axis = 0) {
     st.t += dt;
+    if (st.crash >= 0) {
+      st.crash += dt;
+      const k = st.crash;
+      narmi.root.rotation.z += dt * 9 * Math.max(0, 1 - k);
+      narmi.root.rotation.x = -0.6 * Math.min(1, k * 2);
+      narmi.root.position.y = -0.9 + 1.2 * Math.sin(Math.min(k, 0.6) * 5) * Math.exp(-k * 2) - k * k * 1.5;
+      animateNarmi(narmi, st.t, { flap: 0.3, flapSpeed: 30, pitch: 0.2, tuck: 0.2 });
+      return;
+    }
+    if (st.inv > 0) { st.inv -= dt; narmi.root.visible = st.inv <= 0 || Math.sin(st.inv * 30) > -0.3; }
     if (axis) st.target = clampX(st.target + axis * KEY_SPEED * dt);
     // 스프링으로 목표를 따라간다. 손가락보다 살짝 늦게 따라와 날아가는 느낌이 나게.
     const k = 160, d = 24;
@@ -405,7 +859,7 @@ export function createPlayer(scene) {
     animateNarmi(narmi, st.t, { flap: 1.25, flapSpeed: 11, bank: st.bank, pitch: 1.05, tuck: 1.4 });
   }
 
-  return { narmi, st, drag, setTarget, update, get x() { return st.x; } };
+  return { narmi, st, drag, setTarget, update, crash, revive, reset, get x() { return st.x; } };
 }
 </script>
 <script type="text/plain" data-mod="./showcase.js">// 캐릭터 확인용 장면(?view=front|side|back|three|spin). 게임과 별개로 캐릭터만 다듬을 때 쓴다.
@@ -471,6 +925,96 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
 });
 window.__ready = true;
+</script>
+<script type="text/plain" data-mod="./ui.js">// 화면 글자: 점수판, 한 줄 알림, 구간 안내, 시작·결과 화면. 3D 위에 HTML로 겹쳐 그린다.
+const CSS = `
+#ui [hidden] { display:none !important; }
+#ui, #ui * { box-sizing:border-box; }
+#ui { --ink:#1d2a33; --sub:#5b6b78; --tan:#ff8a1f; --card:rgba(255,255,255,.94); font-size:16px; }
+#ui .hud { position:absolute; left:0; right:0; top:0; display:flex; justify-content:space-between; align-items:flex-start; gap:8px;
+  padding:calc(env(safe-area-inset-top,0px) + 12px) max(14px, env(safe-area-inset-right,0px)) 0 max(14px, env(safe-area-inset-left,0px)); }
+#ui .pill { background:var(--card); border-radius:999px; padding:7px 14px; font-weight:800; box-shadow:0 2px 10px rgba(20,50,80,.12); display:flex; align-items:center; gap:8px; white-space:nowrap; }
+#ui .pill small { font-weight:600; color:var(--sub); font-size:12px; }
+#ui .score { font-size:20px; font-variant-numeric:tabular-nums; }
+#ui .cargo { display:flex; gap:3px; flex-wrap:wrap; max-width:110px; }
+#ui .cargo i { width:11px; height:11px; border-radius:3px; display:block; }
+#ui .c-box { background:#c89a62; } #ui .c-innov { background:#fff; outline:2px solid #f2b84b; outline-offset:-2px; } #ui .c-sme { background:#4fae6a; }
+#ui .right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+#ui .bar { width:120px; height:6px; border-radius:3px; background:rgba(255,255,255,.6); overflow:hidden; }
+#ui .bar b { display:block; height:100%; width:0; background:var(--tan); }
+#ui .toast { position:absolute; left:50%; top:calc(env(safe-area-inset-top,0px) + 70px); transform:translate(-50%,0); background:var(--card); padding:8px 16px; border-radius:12px;
+  font-weight:700; box-shadow:0 4px 16px rgba(20,50,80,.15); opacity:0; transition:opacity .2s, transform .2s; max-width:min(88vw,520px); text-align:center; }
+#ui .toast.show { opacity:1; transform:translate(-50%,6px); }
+#ui .banner { position:absolute; left:0; right:0; top:34%; text-align:center; font-size:clamp(28px,7vw,52px); font-weight:900; color:#fff;
+  text-shadow:0 3px 0 rgba(0,0,0,.12), 0 6px 24px rgba(30,60,90,.35); opacity:0; transition:opacity .35s; }
+#ui .banner small { display:block; font-size:clamp(14px,3.6vw,20px); font-weight:700; margin-top:6px; }
+#ui .banner.show { opacity:1; }
+#ui .flash { position:absolute; inset:0; background:radial-gradient(ellipse at center, rgba(255,80,60,0) 40%, rgba(255,60,40,.45)); opacity:0; transition:opacity .4s; }
+#ui .flash.show { opacity:1; transition:none; }
+#ui .screen { position:absolute; inset:0; display:grid; place-items:center; padding:20px; background:rgba(16,40,64,.28); }
+#ui .card { background:#fff; border-radius:22px; padding:26px 24px 22px; width:min(92vw,380px); box-shadow:0 12px 40px rgba(10,30,50,.3); text-align:center; color:var(--ink); }
+#ui .card h1 { margin:0 0 6px; font-size:26px; letter-spacing:-.5px; }
+#ui .card h2 { margin:0 0 14px; font-size:15px; color:var(--sub); font-weight:600; }
+#ui .stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:14px 0 18px; }
+#ui .stats div { background:#f4f7fa; border-radius:12px; padding:10px 6px; }
+#ui .stats b { display:block; font-size:22px; font-variant-numeric:tabular-nums; }
+#ui .stats span { font-size:12px; color:var(--sub); }
+#ui .grade { font-size:64px; font-weight:900; color:var(--tan); line-height:1; margin:6px 0 2px; }
+#ui button { font:inherit; font-weight:800; font-size:17px; border:0; border-radius:14px; padding:13px 0; width:100%; background:var(--tan); color:#fff; cursor:pointer; }
+#ui .hint { font-size:13px; color:var(--sub); margin-top:12px; line-height:1.5; }
+`;
+
+export function createUI() {
+  const root = document.getElementById("ui");
+  const style = document.createElement("style"); style.textContent = CSS; document.head.appendChild(style);
+  root.innerHTML = `
+    <div class="hud" hidden>
+      <div class="pill"><span class="score">0</span><small>점</small><span class="cargo"></span></div>
+      <div class="right"><div class="pill"><small class="sec">아침</small><span class="org"></span></div><div class="bar"><b></b></div></div>
+    </div>
+    <div class="toast"></div><div class="banner"></div><div class="flash"></div><div class="layer"></div>`;
+  const $ = s => root.querySelector(s);
+  const hud = $(".hud"), toast = $(".toast"), banner = $(".banner"), flash = $(".flash"), layer = $(".layer");
+  let toastT = 0, bannerT = 0;
+
+  return {
+    hud(show) { hud.hidden = !show; },
+    setScore(n) { $(".score").textContent = n; },
+    setCargo(list) { $(".cargo").innerHTML = list.map(t => `<i class="c-${t}"></i>`).join(""); },
+    setSection(name, orgsLeft) { $(".sec").textContent = name; $(".org").textContent = orgsLeft; },
+    setProgress(k) { $(".bar b").style.width = (Math.max(0, Math.min(1, k)) * 100).toFixed(1) + "%"; },
+    toast(text, secs = 1.6) { toast.textContent = text; toast.classList.add("show"); toastT = secs; },
+    banner(title, sub = "", secs = 2.2) { banner.innerHTML = title + (sub ? `<small>${sub}</small>` : ""); banner.classList.add("show"); bannerT = secs; },
+    flash() { flash.classList.add("show"); requestAnimationFrame(() => requestAnimationFrame(() => flash.classList.remove("show"))); },
+    update(dt) {
+      if (toastT > 0 && (toastT -= dt) <= 0) toast.classList.remove("show");
+      if (bannerT > 0 && (bannerT -= dt) <= 0) banner.classList.remove("show");
+    },
+    start(onGo) {
+      layer.innerHTML = `<div class="screen on"><div class="card">
+        <h1>나르미의 하늘 배송</h1><h2>공공기관에 조달 상자를 배달해요</h2>
+        <button class="go">출발!</button>
+        <div class="hint">폰: 화면을 좌우로 끌기 · PC: ←/→ 키<br>상자를 모아 주황 링을 지나면 배달 완료<br>먹구름과 종이비행기는 피하세요</div>
+      </div></div>`;
+      layer.querySelector(".go").onclick = e => { e.stopPropagation(); layer.innerHTML = ""; onGo(); };
+    },
+    result(r, onAgain) {
+      layer.innerHTML = `<div class="screen on"><div class="card">
+        <h2>${r.title}</h2><div class="grade">${r.grade}</div>
+        <div class="stats">
+          <div><b>${r.score}</b><span>점수</span></div>
+          <div><b>${r.delivered}/${r.rings}</b><span>배달한 기관</span></div>
+          <div><b>${r.innov}</b><span>혁신제품 배달</span></div>
+          <div><b>${r.boxes}</b><span>모은 상자</span></div>
+        </div>
+        <button class="again">다시 하기</button>
+      </div></div>`;
+      layer.querySelector(".again").onclick = e => { e.stopPropagation(); layer.innerHTML = ""; onAgain(); };
+    },
+    clear() { layer.innerHTML = ""; },
+    get busy() { return layer.childElementCount > 0; },
+  };
+}
 </script>
 <script type="text/plain" data-mod="./world.js">// 하늘·구름·도시. 나르미는 z=0 근처에 머물고, 세상이 +z 방향(카메라 쪽)으로 흘러온다.
 import * as THREE from "three";
@@ -552,8 +1096,8 @@ export function createWorld(scene, renderer) {
   function placeCloud(c, z) {
     const side = rand() < 0.5 ? -1 : 1;
     const band = rand();
-    if (band < 0.55) c.position.set(side * (15 + rand() * 30), -4 + rand() * 14, z);  // 옆 (레인과 겹치지 않게)
-    else if (band < 0.85) { const x = (rand() - 0.5) * 50; c.position.set(x + Math.sign(x || 1) * 10, -10 - rand() * 6, z); } // 아래 (레인 바로 밑은 비움)
+    if (band < 0.55) c.position.set(side * (18 + rand() * 30), -2 + rand() * 12, z);  // 옆 (레인과 겹치지 않게)
+    else if (band < 0.85) { const x = (rand() - 0.5) * 50; c.position.set(x + Math.sign(x || 1) * 12, -15 - rand() * 6, z); } // 아래 (레인 바로 밑은 비움)
     else c.position.set((rand() - 0.5) * 50, 12 + rand() * 8, z);                  // 위
   }
 
