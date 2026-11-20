@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-20T06:53:22.088Z">
+<meta name="build" content="2026-11-20T07:17:09.553Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -205,22 +205,27 @@ function onSurface(c, rx, ry, rz, x, y, lift = 0) {
   return new THREE.Vector3(c.x + x, c.y + y, c.z + rz * Math.sqrt(Math.max(k, 0)) + lift);
 }
 
-export function createNarmi() {
+// 모양 값. tools/fit.cjs가 공식 3D 이미지와 윤곽이 가장 잘 겹치는 값을 찾아 여기에 적는다.
+export const NARMI_SHAPE = {headRx: 1.16, headRy: 0.993, headY: 1.78, crestX: 0.406, crestY: 2.58, crestS: 1.408, crestRot: 0.12, torsoRx: 1.426, torsoRy: 0.85, torsoY: 0.629, wingX: 0.451, wingY: 0.851, wingLen: 0.31, wingTh: 0.163, wingRest: -0.95, footX: 0.166, footY: 0.12};
+export const DALI_SHAPE = {headRx: 0.588, headRy: 0.572, headY: 1.198, widen: 0.204, earX: 0.5, earY: 1.6, earS: 0.234, torsoRx: 0.395, torsoRy: 0.47, torsoY: 0.43, armX: 0.441, armY: 0.395, legX: 0.17, tailS: 0.73, tailX: 0.3, tailY: 0.068};
+
+export function createNarmi(over = {}) {
+  const P = { ...NARMI_SHAPE, ...over };
   const root = new THREE.Group();
   const body = new THREE.Group(); // 기울기·흔들림용
   root.add(body);
   const white = mat(C.white), black = mat(C.black, { roughness: 0.3 }), orange = mat(C.orange), red = mat(C.red, { roughness: 0.6 });
 
   // 머리: 위가 살짝 넓은 달걀
-  const HC = new THREE.Vector3(0, 1.78, 0), HR = [1.16, 0.95, 0.98]; // 공식 이미지처럼 머리를 더 크고 넓게
+  const HC = new THREE.Vector3(0, P.headY, 0), HR = [P.headRx, P.headRy, 0.98]; // 공식 이미지처럼 머리를 더 크고 넓게
   const head = ellipsoid(1, ...HR, white, 48);
   head.position.copy(HC);
   body.add(head);
 
   // 정수리 깃: 정수리에서 뒤·오른쪽으로 휘어 넘어간 깃
   const crest = new THREE.Group();
-  crest.position.set(0.32, 2.58, -0.12); crest.scale.setScalar(1.6);
-  crest.rotation.y = 0.12; // 깃이 향하는 쪽: 오른쪽 뒤 (+x를 -z 쪽으로 돌림)
+  crest.position.set(P.crestX, P.crestY, -0.12); crest.scale.setScalar(P.crestS);
+  crest.rotation.y = P.crestRot; // 깃이 향하는 쪽: 오른쪽 뒤 (+x를 -z 쪽으로 돌림)
   [[0, 0, 0, 0.44, 0.17, 0.3, -0.3], [0.26, -0.08, 0, 0.32, 0.13, 0.24, -0.7], [0.42, -0.24, 0, 0.2, 0.1, 0.18, -1.15]]
     .forEach(([x, y, z, sx, sy, sz, rz]) => { const f = ellipsoid(1, sx, sy, sz, white, 24); f.position.set(x, y, z); f.rotation.z = rz; crest.add(f); });
   body.add(crest);
@@ -275,8 +280,8 @@ export function createNarmi() {
   body.add(beak);
 
   // 몸통
-  const torso = ellipsoid(0.5, 1.24, 1.0, 0.98, white);
-  torso.position.set(0, 0.62, 0);
+  const torso = ellipsoid(0.5, P.torsoRx, P.torsoRy, 0.98, white);
+  torso.position.set(0, P.torsoY, 0);
   body.add(torso);
 
   // 스카프와 매듭(오른쪽 앞)
@@ -294,10 +299,11 @@ export function createNarmi() {
   // 날개: 어깨에 축, 끝은 검은 깃
   const wings = [-1, 1].map(s => {
     const pivot = new THREE.Group();
-    pivot.position.set(0.48 * s, 0.76, -0.02);
-    const w = ellipsoid(1, 0.32, 0.19, 0.27, white, 24); w.position.set(0.26 * s, 0, 0); pivot.add(w);
-    const tip = ellipsoid(1, 0.2, 0.14, 0.23, mat(C.wingTip), 20); tip.position.set(0.5 * s, -0.03, -0.02); pivot.add(tip);
-    [0, 1, 2].forEach(i => { const f = ellipsoid(1, 0.14, 0.05, 0.07, mat(C.wingTip), 10); f.position.set((0.62 + i * 0.02) * s, -0.02, 0.11 - i * 0.11); f.rotation.y = 0.3 * s * (i - 1); pivot.add(f); });
+    pivot.position.set(P.wingX * s, P.wingY, -0.02);
+    const L = P.wingLen / 0.32;
+    const w = ellipsoid(1, P.wingLen, P.wingTh, 0.27, white, 24); w.position.set(0.26 * L * s, 0, 0); pivot.add(w);
+    const tip = ellipsoid(1, 0.2 * L, P.wingTh * 0.74, 0.23, mat(C.wingTip), 20); tip.position.set(0.5 * L * s, -0.03, -0.02); pivot.add(tip);
+    [0, 1, 2].forEach(i => { const f = ellipsoid(1, 0.14, 0.05, 0.07, mat(C.wingTip), 10); f.position.set((0.62 * L + i * 0.02) * s, -0.02, 0.11 - i * 0.11); f.rotation.y = 0.3 * s * (i - 1); pivot.add(f); });
     pivot.userData.side = s;
     body.add(pivot);
     return pivot;
@@ -309,7 +315,7 @@ export function createNarmi() {
 
   // 발(크고 통통하게)
   const feet = [-1, 1].map(s => {
-    const g = new THREE.Group(); g.position.set(0.17 * s, 0.12, 0.1);
+    const g = new THREE.Group(); g.position.set(P.footX * s, P.footY, 0.1);
     const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.18, 12), orange); leg.position.y = 0.06; g.add(leg);
     [-0.085, 0, 0.085].forEach(x => { const t = ellipsoid(0.085, 1, 0.65, 1.7, orange, 14); t.position.set(x, -0.04, 0.1); t.rotation.y = x * 3; g.add(t); });
     body.add(g);
@@ -323,25 +329,26 @@ export function createNarmi() {
   body.add(inner);
   body.position.y = PIVOT_Y;
   body.userData.baseY = PIVOT_Y;
-  root.userData.parts = { body, head, wings, feet, eyes };
+  root.userData.parts = { body, head, wings, feet, eyes, wingRest: P.wingRest };
   return { root, parts: root.userData.parts };
 }
 
-export function createDali() {
+export function createDali(over = {}) {
+  const P = { ...DALI_SHAPE, ...over };
   const root = new THREE.Group();
   const body = new THREE.Group();
   root.add(body);
   const fur = mat(C.fur), furDark = mat(C.furDark), cream = mat(C.cream), black = mat(C.black, { roughness: 0.3 }), strap = mat(C.strap, { roughness: 0.7 });
 
   // 머리
-  const HC = new THREE.Vector3(0, 1.18, 0), HR = [0.68, 0.54, 0.52];
+  const HC = new THREE.Vector3(0, P.headY, 0), HR = [P.headRx, P.headRy, 0.52];
   const head = ellipsoid(1, ...HR, fur, 48); head.position.copy(HC); body.add(head);
   // 얼굴형: 위는 둥글고, 볼이 있는 아래쪽이 옆으로 더 넓은 둥근 윤곽(하관이 통통한 형태)
   const widen = (g, k) => { const pos = g.attributes.position;
     for (let i = 0; i < pos.count; i++) { const y = pos.getY(i), f = Math.exp(-(((y + 0.42) / 0.4) ** 2));
       pos.setX(i, pos.getX(i) * (1 + k * f)); }
     g.computeVertexNormals(); };
-  widen(head.geometry, 0.15);
+  widen(head.geometry, P.widen);
   // 아래 얼굴(크림색): 공식 그림처럼 머리 아래쪽 절반을 볼까지 크림색으로 칠한다(따로 붙인 판이 아니라 머리 색을 나눔)
   { const pos = head.geometry.attributes.position, col = [], a = new THREE.Color(C.fur), b = new THREE.Color(C.cream), c = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
@@ -355,8 +362,8 @@ export function createDali() {
 
   // 귀
   [-1, 1].forEach(s => {
-    const ear = ellipsoid(1, 0.22, 0.22, 0.1, fur, 20); ear.position.set(0.5 * s, 1.6, -0.04); ear.rotation.z = -0.35 * s; body.add(ear);
-    const inner = ellipsoid(1, 0.13, 0.13, 0.05, cream, 16); inner.position.set(0.5 * s, 1.6, 0.03); inner.rotation.z = -0.35 * s; body.add(inner);
+    const ear = ellipsoid(1, P.earS, P.earS, 0.1, fur, 20); ear.position.set(P.earX * s, P.earY, -0.04); ear.rotation.z = -0.35 * s; body.add(ear);
+    const inner = ellipsoid(1, P.earS * 0.6, P.earS * 0.6, 0.05, cream, 16); inner.position.set(P.earX * s, P.earY, 0.03); inner.rotation.z = -0.35 * s; body.add(inner);
   });
   // 이마 줄무늬
   [-0.16, 0, 0.16].forEach((x, i) => {
@@ -374,17 +381,17 @@ export function createDali() {
   [-0.045, 0.045].forEach(x => { const m = mouth.clone(); m.position.set(x, 0.96, 0.54); m.rotation.z = Math.PI; body.add(m); });
 
   // 몸통과 배
-  const torso = ellipsoid(1, 0.42, 0.42, 0.36, fur, 28); torso.position.set(0, 0.43, 0); body.add(torso);
+  const torso = ellipsoid(1, P.torsoRx, P.torsoRy, 0.36, fur, 28); torso.position.set(0, P.torsoY, 0); body.add(torso);
   const belly = ellipsoid(1, 0.28, 0.26, 0.22, cream, 20); belly.position.set(0, 0.4, 0.17); body.add(belly);
   // 팔·다리
-  const arms = [-1, 1].map(s => { const a = ellipsoid(1, 0.09, 0.2, 0.09, fur, 14); a.position.set(0.36 * s, 0.5, 0.08); a.rotation.z = 0.25 * s; body.add(a); return a; });
-  [-1, 1].forEach(s => { const l = ellipsoid(1, 0.12, 0.1, 0.16, fur, 14); l.position.set(0.17 * s, 0.07, 0.08); body.add(l); });
+  const arms = [-1, 1].map(s => { const a = ellipsoid(1, 0.09, 0.2, 0.09, fur, 14); a.position.set(P.armX * s, P.armY, 0.08); a.rotation.z = 0.25 * s; body.add(a); return a; });
+  [-1, 1].forEach(s => { const l = ellipsoid(1, 0.12, 0.1, 0.16, fur, 14); l.position.set(P.legX * s, 0.07, 0.08); body.add(l); });
   // 배낭 끈과 배낭
   [-1, 1].forEach(s => { const st = ellipsoid(1, 0.08, 0.2, 0.14, strap, 14); st.position.set(0.36 * s, 0.6, -0.12); body.add(st); });
   const pack = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.5, 0.24, 2, 2, 2), strap); pack.position.set(0, 0.55, -0.38); body.add(pack);
   const flap = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.18, 0.26), mat(0x6f452c)); flap.position.set(0, 0.74, -0.38); body.add(flap);
   // 꼬리: 뒤에서 위로 말려 올라가는 큰 꼬리, 끝은 흰색
-  const tail = new THREE.Group(); tail.position.set(0.22, 0.14, -0.28);
+  const tail = new THREE.Group(); tail.position.set(P.tailX, P.tailY, -0.28); tail.scale.setScalar(P.tailS);
   const curve = new THREE.CatmullRomCurve3([[0, 0, 0], [0.16, 0.06, -0.1], [0.3, 0.2, -0.1], [0.34, 0.4, -0.05], [0.28, 0.54, 0.02]].map(v => new THREE.Vector3(...v)));
   // 굵기가 변하는 튜브: 뿌리는 가늘고 가운데가 통통, 끝은 둥글게
   const N = 48, R = 18, geo = new THREE.TubeGeometry(curve, N, 1, R, false);
@@ -410,7 +417,7 @@ export function animateNarmi(n, t, opt = {}) {
   const flap = opt.flap ?? 1, speed = opt.flapSpeed ?? 9;
   const a = Math.sin(t * speed) * 0.75 * flap;
   // 쉴 때는 공식 그림처럼 날개를 아래로 늘어뜨린다
-  wings.forEach(w => { w.rotation.z = w.userData.side * (-0.95 + 0.5 * flap + a); w.rotation.y = w.userData.side * 0.15 * flap; });
+  wings.forEach(w => { w.rotation.z = w.userData.side * ((n.parts.wingRest ?? -0.95) + 0.5 * flap + a); w.rotation.y = w.userData.side * 0.15 * flap; });
   body.position.y = body.userData.baseY + Math.sin(t * speed - 0.6) * 0.05 * flap;
   body.rotation.order = "YXZ";
   body.rotation.x = opt.pitch ?? 0;              // 앞으로 숙이기(비행 자세)
@@ -1476,10 +1483,22 @@ if (solo) {
   const who = solo === "narmi" ? narmi : dali;
   who.root.position.set(0, 0, 0); who.root.scale.setScalar(1);
   const box = new THREE.Box3().setFromObject(who.root), c = box.getCenter(new THREE.Vector3()), h = box.max.y - box.min.y;
-  camera.fov = 12; camera.position.set(0, c.y + h * 0.35, h / 2 / Math.tan(6 * Math.PI / 180) * 1.25); camera.lookAt(c);
+  const el = q.has("el") ? +q.get("el") : 0.35; // 카메라 높이(공식 렌더는 살짝 위에서)
+  camera.fov = 12; camera.position.set(0, c.y + h * el, h / 2 / Math.tan(6 * Math.PI / 180) * 1.25); camera.lookAt(c);
 }
+// 모양 맞추기용: 캐릭터를 주어진 모양 값으로 다시 만들고 한 장 찍어 돌려준다 (tools/fit.cjs)
+let cur = solo === "dali" ? dali : narmi;
+window.__shape = over => {
+  scene.remove(cur.root);
+  cur = solo === "dali" ? createDali(over) : createNarmi(over);
+  scene.add(cur.root);
+  cur.root.rotation.y = q.has("ang") ? +q.get("ang") : 0;
+  if (solo === "dali") animateDali(cur, 0.3, {}); else animateNarmi(cur, 0.3, { flap });
+  renderer.render(scene, camera);
+  return canvas.toDataURL("image/png");
+};
 const view = q.get("view");
-const fixedAngle = { front: 0, three: -0.6, side: -Math.PI / 2, back: Math.PI }[view]; // spin이면 undefined → 회전
+const fixedAngle = q.has("ang") ? +q.get("ang") : { front: 0, three: -0.6, side: -Math.PI / 2, back: Math.PI }[view]; // spin이면 undefined → 회전
 const flap = q.has("flap") ? +q.get("flap") : 0.25;
 
 function resize() {
@@ -1496,6 +1515,7 @@ const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const t = q.has("t") ? +q.get("t") : clock.getElapsedTime();
   const ang = fixedAngle ?? Math.sin(t * 0.5) * 0.8;
+  if (q.has("fit")) return; // 맞추기 중에는 __shape가 직접 그린다
   narmi.root.rotation.y = ang;
   dali.root.rotation.y = ang;
   animateNarmi(narmi, t, { flap });
