@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-20T08:01:40.770Z">
+<meta name="build" content="2026-11-20T10:00:55.218Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -180,6 +180,976 @@ export function createAudio() {
     },
     get ready() { return !!ctx; },
   };
+}
+</script>
+<script type="text/plain" data-mod="./center.js">// 나르미 조달 센터: 하늘에 뜬 작은 도시. 가운데 조달청, 둘레에 학교·소방서·보건소·도서관.
+// 기관이 주문하면 말풍선이 뜨고, 눌러서 기업을 골라 계약하면 나르미가 날아가 배달한다. 사흘(3스테이지).
+// 시험용 주소 옵션: ?auto=1 (자동으로 가장 좋은 기업 선택), ?manual=1 (프레임 직접 진행: window.__center.step), ?day=0~2 (그날부터)
+import * as THREE from "three";
+import { createNarmi, createDali, animateNarmi, animateDali } from "./characters.js";
+import { makeBuilding, makeBox, labelTexture } from "./objects.js";
+import { LOGO_H } from "./assets.js";
+import { createAudio } from "./audio.js";
+import { createFx } from "./fx.js";
+import { createCenterUI } from "./center_ui.js";
+import { ORGS, DAYS, FINAL_LINE } from "./center_data.js";
+import { makeOrder, judge, score, rng, WHY } from "./center_logic.js";
+
+const q = new URLSearchParams(location.search);
+const auto = q.has("auto"), manual = q.has("manual");
+const BEST_KEY = "narmi-center-best-v1";
+const SLOW = 0.3;            // 입찰 시트를 연 동안 시간 흐름
+const ORG_KEYS = ["school", "fire", "health", "library"];
+const GRADE_RANK = { S: 4, A: 3, B: 2, C: 1 };
+
+export function startCenter() {
+  const canvas = document.getElementById("gl");
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: manual });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+  const SKY = new THREE.Color(0xa9dcff), NIGHT_SKY = new THREE.Color(0x1b2550);
+  scene.background = SKY.clone();
+  scene.fog = new THREE.Fog(SKY.clone(), 120, 260);
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.5, 600);
+  scene.add(camera);
+
+  const hemi = new THREE.HemisphereLight(0xffffff, 0xa7c98a, 1.15); scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xfff3e0, 1.9);
+  sun.position.set(22, 46, 28); sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 140 });
+  sun.shadow.bias = -0.0005;
+  scene.add(sun);
+
+  const audio = createAudio(), sfx = audio.play;
+  const fx = createFx(scene);
+  const ui = createCenterUI({ sfx: (k, ...a) => sfx[k](...a), muted: audio.muted, onMute: () => { audio.init(); return audio.toggle(); } });
+  const unlock = () => { audio.init(); removeEventListener("pointerdown", unlock); removeEventListener("keydown", unlock); };
+  addEventListener("pointerdown", unlock); addEventListener("keydown", unlock);
+
+  // ── 섬과 도시 ──────────────────────────────────────
+  const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...o });
+  const box = new THREE.BoxGeometry(1, 1, 1);
+  const mesh = (geo, mat, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1, parent = scene) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.castShadow = m.receiveShadow = true; parent.add(m); return m;
+  };
+  const ISLAND = 34;
+  const grass = mesh(new THREE.CylinderGeometry(ISLAND, ISLAND, 1, 72), std(0x9fd27a), 0, -0.5, 0); grass.castShadow = false;
+  mesh(new THREE.CylinderGeometry(ISLAND - 0.2, ISLAND * 0.55, 9, 72), std(0x9a7656, { flatShading: true }), 0, -5.5, 0).castShadow = false;
+  mesh(new THREE.CylinderGeometry(ISLAND * 0.55, 3, 8, 40), std(0x7e5f45, { flatShading: true }), 0, -14, 0).castShadow = false;
+  // 섬 아래·둘레 구름
+  const cloudMat = std(0xffffff, { roughness: 1, emissive: 0xffffff, emissiveIntensity: 0.15 });
+  const sph = new THREE.SphereGeometry(1, 16, 12);
+  const R = rng(3);
+  for (let i = 0; i < 14; i++) {
+    const a = i / 14 * Math.PI * 2 + R(), r = ISLAND + 6 + R() * 18, y = -8 - R() * 10;
+    const g = new THREE.Group(); g.position.set(Math.cos(a) * r, y, Math.sin(a) * r); scene.add(g);
+    for (let k = 0; k < 4; k++) { const s = 3 + R() * 3; const m = mesh(sph, cloudMat, (k - 1.5) * 3.2, R() * 1.5, R() * 2, s, s * 0.7, s, g); m.castShadow = false; }
+  }
+
+  // 조달청 본부 (가운데). 지붕 착륙장에 나르미가 선다.
+  const hq = new THREE.Group(); scene.add(hq);
+  const wallM = std(0xf3f5f8), glassM = std(0x6fa8dc, { roughness: 0.25, metalness: 0.2 }), trimM = std(0x2f5d8a);
+  mesh(box, std(0xd9d4c7), 0, 0.1, 0, 15, 0.2, 13, hq).castShadow = false;
+  mesh(box, wallM, 0, 3.6, 0, 12, 7, 9, hq);
+  for (let r = 0; r < 2; r++) mesh(box, glassM, 0, 2.2 + r * 3, 4.52, 10.6, 1.5, 0.08, hq);
+  mesh(box, trimM, 0, 7.25, 0, 12.4, 0.5, 9.4, hq);
+  mesh(box, wallM, 0, 8.9, -0.5, 7, 2.8, 6, hq);
+  mesh(box, glassM, 0, 8.9, 2.52, 6, 1.3, 0.08, hq);
+  const padY = 10.4;
+  mesh(new THREE.CylinderGeometry(3.3, 3.3, 0.3, 32), std(0xff8a1f), 0, padY, -0.5, 1, 1, 1, hq);
+  mesh(new THREE.CylinderGeometry(2.6, 2.6, 0.32, 32), std(0xffffff), 0, padY + 0.01, -0.5, 1, 1, 1, hq);
+  { // 정면 간판: 조달청 로고(공식 자료 그대로)
+    const tex = new THREE.TextureLoader().load(LOGO_H); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    mesh(box, std(0xffffff), 0, 6.1, 4.62, 6.6, 1.9, 0.12, hq);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 1.55), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }));
+    sign.position.set(0, 6.1, 4.69); hq.add(sign);
+    mesh(box, std(0x8fb7d9), 0, 1.3, 4.55, 3, 2.6, 0.1, hq); // 입구
+  }
+
+  // 기관 건물
+  const orgs = {};
+  for (const k of ORG_KEYS) {
+    const g = new THREE.Group(); scene.add(g);
+    const b = makeBuilding(k); b.scale.multiplyScalar(0.62); g.add(b);
+    const mats = []; b.traverse(o => { if (o.isMesh && o.material?.isMeshStandardMaterial) mats.push(o.material); });
+    const lab = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture(ORGS[k].short, "#1d2a33"), depthTest: false }));
+    lab.scale.set(4.2, 1.3, 1); lab.position.set(0, 1.2, 5.6); lab.renderOrder = 5; g.add(lab);
+    const glow = new THREE.PointLight(0xffc36b, 0, 22); glow.position.set(0, 6, 6); g.add(glow);
+    orgs[k] = { g, b, mats: [...new Set(mats)], top: k === "fire" ? 7.5 : k === "school" ? 6 : 5, glow, bounce: 0, lit: 0, served: 0 };
+  }
+  // 길: 본부에서 각 기관으로
+  const roadM = std(0xefe6d2, { roughness: 1 });
+  const roads = ORG_KEYS.map(() => { const m = mesh(box, roadM, 0, 0.06, 0, 1, 0.12, 3); m.castShadow = false; return m; });
+  // 나무: 섬 가장자리
+  const trunkM = std(0x8a5a3b), leafMs = [std(0x5fb55a), std(0x4ea255), std(0x7cc463)];
+  const cone = new THREE.ConeGeometry(1.6, 3.6, 10), cyl = new THREE.CylinderGeometry(0.3, 0.35, 1.4, 8);
+  const trees = [];
+  for (let i = 0; i < 46; i++) {
+    const a = R() * Math.PI * 2, r = 20 + R() * 12;
+    const t = new THREE.Group(); t.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); scene.add(t);
+    mesh(cyl, trunkM, 0, 0.7, 0, 1, 1, 1, t); const s = 0.7 + R() * 0.6; mesh(cone, leafMs[i % 3], 0, 2.9 * s + 0.4, 0, s, s, s, t);
+    trees.push(t);
+  }
+
+  // 화면 비율에 따라 기관 배치(세로 화면은 위아래로, 가로 화면은 옆으로 넓게)
+  let layoutK = -1;
+  function layout(aspect) {
+    const k = THREE.MathUtils.clamp((aspect - 0.55) / (1.5 - 0.55), 0, 1);
+    if (Math.abs(k - layoutK) < 0.01) return; layoutK = k;
+    const X = THREE.MathUtils.lerp(9.5, 19, k), Z = THREE.MathUtils.lerp(15, 9.5, k);
+    const P = { school: [-X, -Z], fire: [X, -Z], health: [-X, Z], library: [X, Z] };
+    ORG_KEYS.forEach((key, i) => {
+      const [x, z] = P[key]; orgs[key].g.position.set(x, 0, z);
+      const len = Math.hypot(x, z), r = roads[i];
+      r.position.set(x / 2, 0.06, z / 2); r.scale.set(3, 0.12, len); r.rotation.y = Math.atan2(x, z);
+    });
+    // 기관과 겹치는 나무는 숨긴다
+    for (const t of trees) {
+      const near = ORG_KEYS.some(key => t.position.distanceTo(orgs[key].g.position) < 8.5) || Math.hypot(t.position.x, t.position.z) < 10;
+      const onRoad = ORG_KEYS.some(key => { const p = orgs[key].g.position, L = p.length(), u = (t.position.x * p.x + t.position.z * p.z) / (L * L); return u > 0 && u < 1 && Math.hypot(t.position.x - p.x * u, t.position.z - p.z * u) < 2.6; });
+      t.visible = !near && !onRoad;
+    }
+  }
+
+  // ── 캐릭터 ──────────────────────────────────────────
+  const narmi = createNarmi(); scene.add(narmi.root);
+  narmi.root.scale.setScalar(1.7);
+  const HOME = new THREE.Vector3(0, padY + 0.2, -0.5);
+  narmi.root.position.copy(HOME);
+  const carry = new THREE.Group(); carry.position.set(0, 0.2, 1.3); carry.visible = false; narmi.root.add(carry); // 들고 나는 상자
+  const dali = createDali(); dali.root.visible = false; camera.add(dali.root);
+  const daliLight = new THREE.PointLight(0xffffff, 8, 10); daliLight.position.set(0, 1, 1); camera.add(daliLight);
+  function daliShow(on) {
+    dali.root.visible = on; daliLight.intensity = on ? 8 : 0;
+    if (!on) return;
+    const portrait = innerWidth / innerHeight < 1;
+    dali.root.position.set(portrait ? -0.25 : -1.75, portrait ? 0.05 : -0.75, -4.9);
+    dali.root.scale.setScalar(portrait ? 0.36 : 0.52);
+    dali.root.rotation.y = portrait ? 0 : 0.35;
+  }
+
+  // ── 상태 ────────────────────────────────────────────
+  const game = { state: "title", day: 0, t: 0, orders: [], records: [], dayRecs: [], seq: 0, sel: null, why: new Set(), r: rng(1), itemUse: {}, night: 0, end: 0, fireT: 0, shift: 0, idle: 0 };
+  const flight = { queue: [], cur: null, k: 0, phase: "home", from: new THREE.Vector3(), to: new THREE.Vector3(), dur: 1 };
+  let best = ""; try { best = localStorage.getItem(BEST_KEY) || ""; } catch {}
+
+  const v3 = new THREE.Vector3();
+  const toScreen = (p) => { v3.copy(p).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; };
+  const orgTop = k => orgs[k].g.position.clone().add(new THREE.Vector3(0, orgs[k].top + 1.2, 0));
+
+  function stats() {
+    const s = score(game.records);
+    ui.setStats({ saved: s.saved, served: s.served, total: game.records.length + game.orders.filter(o => o.state === "wait").length });
+  }
+
+  function showTitle() {
+    game.state = "title"; ui.hud(false); ui.clear(); daliShow(false);
+    audio.music("title");
+    ui.title({ best }, () => { sfx.go(); newRun(); });
+  }
+  function newRun() {
+    Object.assign(game, { records: [], day: +(q.get("day") || 0), r: rng(Date.now() & 0xffff || 1), itemUse: {}, why: new Set(), night: 0 });
+    if (auto) game.r = rng(7);
+    ORG_KEYS.forEach(k => orgs[k].served = 0);
+    startDay();
+  }
+  function startDay() {
+    const d = DAYS[game.day];
+    Object.assign(game, { state: "talk", t: 0, orders: [], dayRecs: [], sel: null, fireT: 0, spawned: new Set(), end: 0 });
+    flight.queue = []; ui.hud(true); ui.setDay(d.title.split(" · ")[0]); stats();
+    audio.music("title");
+    daliShow(true);
+    ui.talk({ tag: `달이 · ${d.title}`, lines: d.intro, rule: d.rule, btn: game.day === 0 ? "잘 부탁해!" : "알겠어!" }, () => {
+      daliShow(false); game.state = "play"; sfx.banner(); audio.music("play", game.day);
+      ui.banner(d.title, d.sub);
+    });
+    if (auto) ui._go();
+  }
+
+  function spawn(spec) {
+    const o = makeOrder(spec, game.r, game.itemUse);
+    const item = { id: ++game.seq, ...o, left: spec.dl, state: "wait", out: 0 };
+    game.orders.push(item);
+    sfx.note();
+    if (spec.fire) { // 산불: 화면이 붉게 경고, 소방서 뒤로 연기
+      game.fireT = 12; sfx.hit(); ui.banner("🔥 산불 발생!", "소방서 긴급 주문을 먼저!", 2.4, true);
+    }
+    stats();
+  }
+  function openOrder(id) {
+    const o = game.orders.find(x => x.id === id && x.state === "wait"); if (!o) return;
+    game.sel = id; sfx.click();
+    ui.openSheet(o, () => o.left / o.dl, i => contract(o, i), () => { game.sel = null; ui.closeSheet(); });
+  }
+  function contract(o, i) {
+    if (o.state !== "wait") return;
+    const j = judge(o, i), b = o.bids[i];
+    o.state = "done"; o.out = 0; game.sel = null; ui.closeSheet();
+    const rec = { ...j, kind: o.kind, bestSaved: o.bestSaved, tag: b.tag, org: o.org };
+    game.records.push(rec); game.dayRecs.push(rec);
+    if (j.sat) orgs[o.org].served++;
+    const [x, y] = toScreen(orgTop(o.org));
+    ui.float(j.saved >= 0 ? `+${j.saved.toLocaleString()}만원` : `-${(-j.saved).toLocaleString()}만원`, x, y - 70, j.tier);
+    const why = j.why && !game.why.has(j.why) ? (game.why.add(j.why), WHY[j.why]) : "";
+    ui.say(j.msg, why, j.tier);
+    j.tier === "good" ? sfx.right() : j.tier === "bad" ? sfx.wrong() : sfx.pick("box");
+    flight.queue.push({ org: o.org, type: b.tag === "innov" ? "innov" : b.tag === "sme" ? "sme" : "box", bad: j.tier === "bad" });
+    stats();
+  }
+  function expire(o) {
+    o.state = "miss"; o.out = 0;
+    if (game.sel === o.id) { game.sel = null; ui.closeSheet(); }
+    const rec = { tier: "bad", saved: 0, sat: false, fair: false, late: true, kind: o.kind, bestSaved: o.bestSaved, org: o.org };
+    game.records.push(rec); game.dayRecs.push(rec);
+    const why = !game.why.has("late") ? (game.why.add("late"), WHY.late) : "";
+    ui.say(`${ORGS[o.org].name}이(가) 기다리다 지쳤어요`, why, "bad");
+    sfx.miss(); stats();
+  }
+
+  function endDay() {
+    game.state = "talk";
+    const d = DAYS[game.day], s = score(game.dayRecs), last = game.day === DAYS.length - 1;
+    const chips = `<div class="day-stats"><span>납품 ${s.served}/${s.total}</span><span>세금 ${s.saved < 0 ? "-" : ""}${Math.abs(s.saved).toLocaleString()}만원 ${s.saved < 0 ? "낭비" : "절약"}</span>${s.caught ? `<span>담합 ${s.caught}건 적발</span>` : ""}</div>`;
+    daliShow(true); sfx.result(s.grade); audio.music("title");
+    ui.talk({ tag: "달이", title: `${d.title.split(" · ")[0]} 끝! 수고했어`, stats: chips, lines: [], fact: d.outro, btn: last ? "근무 끝!" : "내일도 힘내자!" }, () => {
+      daliShow(false);
+      if (last) finale(); else { game.day++; startDay(); }
+    });
+    if (auto) ui._go();
+  }
+  // 마지막: 밤이 되고 납품받은 기관에 불이 켜진다 → 결과
+  function finale() {
+    game.state = "finale"; game.end = 0; ui.hud(false); audio.music("off");
+    ORG_KEYS.forEach((k, i) => setTimeout(() => { if (orgs[k].served) { sfx.ring(); fx.burst(orgTop(k), "ok"); } }, 900 + i * 450));
+  }
+  function showResult() {
+    game.state = "result";
+    const sc = score(game.records);
+    if (!best || GRADE_RANK[sc.grade] > GRADE_RANK[best]) { best = sc.grade; try { localStorage.setItem(BEST_KEY, best); } catch {} }
+    sfx.result(sc.grade); daliShow(false);
+    ui.result(sc, () => { game.night = 0; showTitle(); });
+    window.__center.last = sc;
+  }
+
+  // 자동 플레이(시험·영상용): 주문이 오면 1초 뒤 열고, 0.8초 뒤 가장 좋은 기업과 계약
+  function autoPilot(dt) {
+    game.idle += dt;
+    if (game.sel) { if (game.idle > 0.8) { const o = game.orders.find(x => x.id === game.sel); game.idle = 0; contract(o, o.best); } return; }
+    const o = game.orders.find(x => x.state === "wait" && x.dl - x.left > 1);
+    if (o && game.idle > 0.4) { game.idle = 0; openOrder(o.id); }
+  }
+
+  // ── 나르미 비행 ────────────────────────────────────
+  function updateFlight(dt, t) {
+    const n = narmi.root;
+    if (!flight.cur && flight.queue.length && flight.phase === "home") {
+      flight.cur = flight.queue.shift(); flight.phase = "go"; flight.k = 0;
+      flight.from.copy(HOME); flight.to.copy(orgTop(flight.cur.org)).add(new THREE.Vector3(0, 1.2, 0));
+      flight.dur = 0.55 + flight.from.distanceTo(flight.to) / 26;
+      setCarry(flight.cur.type); carry.visible = true; sfx.whoosh();
+    }
+    if (flight.phase === "go" || flight.phase === "back") {
+      flight.k = Math.min(1, flight.k + dt / flight.dur);
+      const k = flight.k, e = k * k * (3 - 2 * k);
+      n.position.lerpVectors(flight.from, flight.to, e); n.position.y += Math.sin(Math.PI * k) * 6;
+      const dx = flight.to.x - flight.from.x, dz = flight.to.z - flight.from.z;
+      n.rotation.y = lerpAng(n.rotation.y, Math.atan2(dx, dz), 1 - Math.exp(-dt * 12));
+      animateNarmi(narmi, t, { flap: 1, flapSpeed: 13, pitch: 0.35, bank: 0 });
+      if (k >= 1) {
+        if (flight.phase === "go") {
+          const c = flight.cur, o = orgs[c.org];
+          carry.visible = false; drop(c.type, n.position.clone(), o.g.position.clone().add(new THREE.Vector3(0, o.top, 0)), c.bad, c.org);
+          flight.phase = "back"; flight.k = 0; flight.from.copy(n.position); flight.to.copy(HOME);
+          flight.dur = 0.45 + flight.from.distanceTo(flight.to) / 30;
+        } else { flight.phase = "home"; flight.cur = null; }
+      }
+    } else {
+      // 지붕에서 쉬기: 카메라를 보고 가볍게 숨쉬기
+      n.position.lerp(HOME, 1 - Math.exp(-dt * 8));
+      n.rotation.y = lerpAng(n.rotation.y, 0, 1 - Math.exp(-dt * 6));
+      animateNarmi(narmi, t, { flap: game.state === "result" || game.state === "finale" ? 0.5 : 0.08, flapSpeed: 6, pitch: 0, tuck: 0 });
+    }
+  }
+  const lerpAng = (a, b, k) => { let d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; return a + d * k; };
+  const carryBoxes = {};
+  function setCarry(type) {
+    carryBoxes[type] ??= (() => { const m = makeBox(type); m.scale.setScalar(1.1); carry.add(m); return m; })();
+    for (const k in carryBoxes) carryBoxes[k].visible = k === type;
+  }
+
+  // 떨어지는 상자: 나르미 발밑에서 기관 지붕으로
+  const drops = [];
+  function drop(type, from, to, bad, org) {
+    const m = makeBox(type); m.position.copy(from); m.scale.setScalar(1.1); scene.add(m);
+    let k = 0;
+    drops.push(dt => {
+      k = Math.min(1, k + dt / 0.45);
+      m.position.lerpVectors(from, to, k * k); m.rotation.y += dt * 6;
+      if (k >= 1) {
+        scene.remove(m); orgs[org].bounce = 1;
+        fx.burst(to.clone().add(new THREE.Vector3(0, 1, 0)), bad ? "bad" : "ok"); bad ? sfx.miss() : sfx.ring();
+        return false;
+      }
+      return true;
+    });
+  }
+
+  // ── 카메라: 섬 전체가 들어오게 거리 맞추기 ──────────
+  const camDir = new THREE.Vector3(0, Math.sin(0.86), Math.cos(0.86)); // 위에서 약 49도
+  const target = new THREE.Vector3(0, 2, 1.5);
+  let camDist = 80;
+  function fitCamera() {
+    const pts = [];
+    ORG_KEYS.forEach(k => { const p = orgs[k].g.position; for (const sx of [-5, 5]) for (const sz of [-4, 5]) { pts.push(new THREE.Vector3(p.x + sx, 0, p.z + sz)); } pts.push(new THREE.Vector3(p.x, orgs[k].top + 9, p.z)); });
+    pts.push(new THREE.Vector3(0, padY + 3, 0));
+    let lo = 20, hi = 260;
+    const portrait = innerWidth / innerHeight < 1;
+    const top = portrait ? 0.74 : 0.78, bot = portrait ? -0.86 : -0.9;
+    for (let i = 0; i < 24; i++) {
+      const d = (lo + hi) / 2; camera.position.copy(target).addScaledVector(camDir, d); camera.lookAt(target); camera.updateMatrixWorld();
+      const ok = pts.every(p => { v3.copy(p).project(camera); return Math.abs(v3.x) < 0.9 && v3.y < top && v3.y > bot; });
+      ok ? (hi = d) : (lo = d);
+    }
+    camDist = hi;
+  }
+  function updateCamera(dt, t) {
+    const portrait = innerWidth / innerHeight < 1;
+    // 세로 화면에서 입찰 시트를 열면 주문한 기관이 시트 위에 보이게 도시를 올린다
+    let want = 0;
+    const so = portrait && ui.sheetOpen && game.orders.find(o => o.id === game.sel);
+    if (so) { const [, y] = toScreen(orgTop(so.org)); want = THREE.MathUtils.clamp((y + game.shift * innerHeight) / innerHeight - 0.3, 0, 0.4); }
+    game.shift += (want - game.shift) * (1 - Math.exp(-dt * 8));
+    const sway = game.state === "title" || game.state === "result" ? Math.sin(t * 0.15) * 0.25 : 0;
+    const dir = camDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), sway);
+    const zoom = game.state === "title" ? 0.8 : 1;
+    camera.position.copy(target).addScaledVector(dir, camDist * zoom);
+    camera.lookAt(target);
+    camera.setViewOffset(innerWidth, innerHeight, 0, game.shift * innerHeight, innerWidth, innerHeight);
+  }
+
+  function resize() {
+    const w = innerWidth, h = innerHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h;
+    layout(w / h); camera.clearViewOffset(); camera.updateProjectionMatrix(); fitCamera();
+    if (dali.root.visible) daliShow(true);
+  }
+  addEventListener("resize", resize);
+  resize();
+
+  // ── 매 프레임 ──────────────────────────────────────
+  let clock = 0;
+  function step(dt) {
+    clock += dt;
+    const st = game.state;
+    if (st === "play") {
+      if (auto) autoPilot(dt);
+      const gdt = dt * (ui.sheetOpen ? SLOW : 1);
+      game.t += gdt;
+      const d = DAYS[game.day];
+      for (const s of d.orders) if (!game.spawned.has(s) && game.t >= s.at) { game.spawned.add(s); spawn(s); }
+      for (const o of game.orders) {
+        if (o.state === "wait") { o.left -= gdt; if (o.left <= 0) expire(o); }
+        else o.out += dt;
+      }
+      game.orders = game.orders.filter(o => o.state === "wait" || o.out < 1.4);
+      if (game.dayRecs.length >= d.orders.length && !flight.cur && !flight.queue.length && flight.phase === "home" && !drops.length) {
+        if ((game.end += dt) > 0.8) { game.end = 0; endDay(); }
+      }
+    }
+    // 말풍선 위치 갱신
+    if (st === "play") {
+      const per = {};
+      ui.bubbles(game.orders.map(o => {
+        const n = per[o.org] = (per[o.org] || 0) + 1;
+        const [x, y] = toScreen(orgTop(o.org));
+        return { id: o.id, emoji: o.item.e, label: ORGS[o.org].short + (o.kind === "urgent" ? " 긴급" : ""), k: o.left / o.dl, urgent: o.kind === "urgent", x: x + (n - 1) * 70, y, state: o.state, sel: game.sel === o.id, fade: o.out > 1 };
+      }), openOrder);
+    } else ui.bubbles([], () => {});
+    // 산불 연기
+    if (game.fireT > 0) {
+      game.fireT -= dt;
+      if (Math.random() < dt * 6) { const p = orgs.fire.g.position; fx.burst(new THREE.Vector3(p.x * 1.6 + (Math.random() - 0.5) * 8, 2 + Math.random() * 3, p.z * 1.4 - 6), "bad"); }
+    }
+    // 밤(마지막)
+    if (st === "finale") { game.end += dt; if (game.end > 3.6) showResult(); }
+    const nightWant = st === "finale" || st === "result" ? 1 : 0;
+    game.night += (nightWant - game.night) * (1 - Math.exp(-dt * 1.6));
+    scene.background.copy(SKY).lerp(NIGHT_SKY, game.night * 0.85); scene.fog.color.copy(scene.background);
+    sun.intensity = 1.9 * (1 - game.night * 0.7); hemi.intensity = 1.15 * (1 - game.night * 0.55);
+    for (const k of ORG_KEYS) {
+      const o = orgs[k];
+      o.lit += ((game.night > 0.3 && o.served ? 1 : 0) - o.lit) * (1 - Math.exp(-dt * 2));
+      o.glow.intensity = o.lit * 260;
+      o.mats.forEach(m => { m.emissive?.setHex(0xffb347); m.emissiveIntensity = o.lit * 0.22 + (m.userData.baseE ?? (m.userData.baseE = 0)); });
+      o.bounce = Math.max(0, o.bounce - dt * 3);
+      const s = 1 + Math.sin(o.bounce * Math.PI * 2) * 0.06 * o.bounce;
+      o.b.scale.set(0.558 * s, 0.558 / s, 0.558 * s);
+    }
+    updateFlight(dt, clock);
+    for (let i = drops.length - 1; i >= 0; i--) if (!drops[i](dt)) drops.splice(i, 1);
+    if (dali.root.visible) animateDali(dali, clock, { talk: ui.talking ? (/[\s.,!?·]/.test(ui.talking) ? 0 : 0.45 + 0.55 * Math.abs(Math.sin(clock * 17))) : -1, wave: !ui.talking && st === "talk" });
+    fx.update(dt, 0);
+    updateCamera(dt, clock);
+    ui.update(dt);
+    renderer.render(scene, camera);
+  }
+
+  // 런치 화면: 최소 2.6초(누르면 바로)
+  const splash = document.getElementById("splash");
+  const endSplash = () => {
+    if (!splash || splash.classList.contains("out")) return;
+    splash.classList.add("out"); if (game.state === "title") showTitle();
+    setTimeout(() => splash.remove(), 600);
+  };
+  if (manual || auto) endSplash();
+  else { setTimeout(endSplash, Math.max(0, 2600 - (performance.now() - (window.__t0 || 0)))); splash?.addEventListener("pointerdown", endSplash); }
+
+  window.__center = { game, step, ui, orgs, narmi, dali, camera, scene, flight, contract, openOrder, score: () => score(game.records), newRun };
+  if (auto) newRun(); else showTitle();
+  if (!manual) {
+    let last = performance.now();
+    renderer.setAnimationLoop(now => { const dt = Math.min((now - last) / 1000, 1 / 20); last = now; step(dt); });
+  } else for (let i = 0; i < 20; i++) step(1 / 30);
+  window.__ready = true;
+}
+</script>
+<script type="text/plain" data-mod="./center_data.js">// 나르미 조달 센터: 기관·물건·기업·사흘치 주문 대본·달이 대사.
+// 제도 설명은 docs/퀴즈_출처.md 의 번호(src)와 맞춘다. 기업 이름은 모두 지어낸 이름.
+
+export const ORGS = {
+  school: { name: "한빛초등학교", short: "학교", emoji: "🏫" },
+  fire: { name: "푸른소방서", short: "소방서", emoji: "🚒" },
+  health: { name: "햇살보건소", short: "보건소", emoji: "🏥" },
+  library: { name: "마을도서관", short: "도서관", emoji: "📚" },
+};
+
+// 기관별 필요한 물건. p = 적정가(만원, 주문 전체), innov = 혁신제품일 때 붙는 설명
+export const ITEMS = {
+  school: [
+    { n: "책상·의자 30세트", e: "🪑", p: 900, innov: "높이가 저절로 맞춰지는 책상" },
+    { n: "노트북 20대", e: "💻", p: 2400, innov: "전기를 절반만 쓰는 노트북" },
+    { n: "전자칠판 5대", e: "🖥️", p: 1500, innov: "손글씨를 바로 글자로 바꾸는 칠판" },
+  ],
+  fire: [
+    { n: "방화복 10벌", e: "🧑‍🚒", p: 1500, innov: "더 가볍고 불에 강한 신소재 방화복" },
+    { n: "소화기 50개", e: "🧯", p: 150, innov: "던지면 불이 꺼지는 소화 볼" },
+    { n: "구조 드론 2대", e: "🚁", p: 1200, innov: "연기 속도 보는 열화상 드론" },
+  ],
+  health: [
+    { n: "체온계 40개", e: "🌡️", p: 200, innov: "닿지 않고 1초에 재는 체온계" },
+    { n: "구급상자 30개", e: "🩹", p: 90, innov: "사용법을 말로 알려 주는 구급상자" },
+    { n: "휠체어 6대", e: "🦽", p: 600, innov: "버튼 하나로 접히는 전동 휠체어" },
+  ],
+  library: [
+    { n: "어린이 책 200권", e: "📚", p: 300, innov: "글을 읽어 주는 점자 그림책" },
+    { n: "열람실 의자 40개", e: "💺", p: 480, innov: "재활용 플라스틱으로 만든 의자" },
+    { n: "태블릿 15대", e: "📱", p: 750, innov: "눈이 덜 피로한 종이 화면 태블릿" },
+  ],
+};
+
+// 기업 이름 (지어낸 이름)
+export const CO = {
+  big: ["대한종합산업", "한결물산", "미래상사", "큰나무산업", "온누리무역", "으뜸산업"],
+  sme: ["솜씨공방", "새싹전자", "작은별제작소", "다온테크", "모아공업", "알찬물산"],
+  innov: ["반짝랩", "아이디어팩토리", "첫걸음테크", "씨앗연구소"],
+  cheap: ["후다닥상사", "대충물산", "뚝딱유통"],
+  collude: [["한통산업", "한통상사"], ["짜고물산", "짜고상회"], ["같이유통", "같이무역"]],
+};
+
+// 사흘 대본. kind: price(값 비교) · quality(너무 싼 저품질) · sme(중소기업) · innov(혁신제품) · collude(담합) · urgent(긴급)
+// at = 시작 뒤 몇 초에 주문이 오는지, dl = 기다려 주는 시간(초)
+export const DAYS = [
+  {
+    title: "1일차 · 첫 출근", sub: "같은 물건이면 더 싸게",
+    intro: [
+      "나르미, 조달청 첫 출근 축하해! 학교나 소방서 같은 공공기관은 필요한 물건을 조달청에 부탁해.",
+      "그럼 우리가 여러 기업에게 값을 써 내게 하고(입찰), 가장 알맞은 곳과 계약해. 오늘은 품질이 다 같으니까 가장 싼 곳을 고르면 돼!",
+    ],
+    rule: "말풍선을 누르고 → 기업 하나를 골라 계약해요",
+    orders: [
+      { at: 1, org: "school", kind: "price", dl: 16 },
+      { at: 9, org: "fire", kind: "price", dl: 15 },
+      { at: 16, org: "health", kind: "price", dl: 15 },
+      { at: 21, org: "library", kind: "price", dl: 15 },
+      { at: 27, org: "school", kind: "price", dl: 14 },
+    ],
+    outro: { title: "조달청이 하는 일", src: [1, 5], text: "공공기관에 필요한 물건을 조달청이 대신 사 줘요. 여러 기업이 값을 써 내며 경쟁하면 같은 물건을 더 싸게 살 수 있어요. 이 입찰은 모두 '나라장터'라는 온라인 장터에서 해요. 아낀 돈은 모두 국민 세금이에요!" },
+  },
+  {
+    title: "2일차 · 싼 게 다가 아니야", sub: "품질 · 중소기업 · 혁신제품",
+    intro: [
+      "오늘은 품질 별점도 봐야 해. 너무 싼데 별이 하나뿐이면 금방 고장 나서 다시 사야 해. 그럼 세금이 두 번 들지!",
+      "그리고 품질과 값이 비슷하면 중소기업 제품이나 새로 나온 혁신제품을 눈여겨봐. 나라가 먼저 사 주면 기업이 크는 데 큰 힘이 되거든.",
+    ],
+    rule: "⭐ 품질 · 🌱 중소기업 · 💡 혁신제품 표시를 확인해요",
+    orders: [
+      { at: 1, org: "school", kind: "quality", dl: 16 },
+      { at: 7, org: "library", kind: "sme", dl: 15 },
+      { at: 13, org: "health", kind: "quality", dl: 14 },
+      { at: 18, org: "fire", kind: "innov", dl: 15 },
+      { at: 24, org: "school", kind: "sme", dl: 14 },
+      { at: 29, org: "health", kind: "innov", dl: 14 },
+    ],
+    outro: { title: "알뜰하게, 함께 크게", src: [7, 10], text: "공공기관은 전체 구매액의 50% 이상을 중소기업 제품으로 사야 해요. 그리고 새로 나온 혁신제품은 조달청이 첫 구매자가 되어 사고, 공공기관이 직접 써 보게 해요. 세금으로 기업도 함께 키우는 거예요." },
+  },
+  {
+    title: "3일차 · 수상한 입찰", sub: "담합을 찾아라 · 긴급 납품",
+    intro: [
+      "조심해! 가끔 기업들이 몰래 짜고 가격을 똑같이 높게 써 낼 때가 있어. 이걸 '입찰 담합'이라고 해. 법으로 금지된 반칙이야.",
+      "이름이 비슷하고 값이 똑같이 비싼 곳들은 의심해 봐. 그리고 재난이 나면 급한 주문부터 빨리 처리해야 해!",
+    ],
+    rule: "🚨 값이 똑같이 비싼 기업들은 담합을 의심해요",
+    orders: [
+      { at: 1, org: "school", kind: "collude", dl: 16 },
+      { at: 7, org: "library", kind: "price", dl: 14 },
+      { at: 12, org: "health", kind: "quality", dl: 14 },
+      { at: 17, org: "fire", kind: "urgent", dl: 9, fire: true },
+      { at: 20, org: "fire", kind: "urgent", dl: 9 },
+      { at: 25, org: "library", kind: "collude", dl: 14 },
+      { at: 30, org: "school", kind: "innov", dl: 14 },
+    ],
+    outro: { title: "담합은 반칙", src: [13, 16], text: "경쟁해야 할 기업들이 몰래 짜고 값을 정하는 입찰 담합은 법으로 금지돼 있어요. 걸리면 과징금을 내고, 최대 2년까지 공공입찰에 참가할 수 없게 될 수 있어요. 공정한 경쟁이 세금을 지켜요." },
+  },
+];
+
+export const FINAL_LINE = "우리가 하는 일이 바로 이거야. 국민 세금으로, 공공기관에 꼭 필요한 물건을, 공정하고 알뜰하게 사 주는 거!";
+
+// 결과 등급
+export const GRADE_LINE = { S: "조달의 달인이 나타났다!", A: "든든한 조달 요원이에요!", B: "조금만 더 하면 베테랑!", C: "내일은 더 잘할 수 있어요" };
+</script>
+<script type="text/plain" data-mod="./center_logic.js">// 나르미 조달 센터 규칙: 입찰 3건 만들기, 고른 기업 판정, 하루·전체 점수. 화면과 무관해서 따로 시험할 수 있다.
+import { ITEMS, CO } from "./center_data.js";
+
+// 시드 고정 난수 (같은 판이면 같은 입찰)
+export function rng(seed = 1) {
+  let s = seed >>> 0 || 1;
+  return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
+}
+const pick = (r, a) => a[Math.floor(r() * a.length)];
+const shuffle = (r, a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const won = (p0, k) => Math.max(1, Math.round(p0 * k / (p0 >= 500 ? 10 : 1)) * (p0 >= 500 ? 10 : 1)); // 큰 금액은 10만원 단위
+
+// 주문 하나 만들기. 같은 판에서 같은 기관 물건이 겹치지 않게 itemUse로 돌려 쓴다.
+export function makeOrder(spec, r, itemUse = {}) {
+  const list = ITEMS[spec.org];
+  const i = (itemUse[spec.org] = ((itemUse[spec.org] ?? Math.floor(r() * list.length)) + 1) % list.length);
+  const item = list[i], p0 = item.p;
+  const names = shuffle(r, CO.big.slice());
+  const B = (name, k, q, tag = "") => ({ name, price: won(p0, k), q, tag });
+  let bids;
+  switch (spec.kind) {
+    case "quality":
+      bids = [B(pick(r, CO.cheap), 0.6, 1), B(names[0], 0.9, 3), B(names[1], 1.18, 3)]; break;
+    case "sme":
+      bids = [B(names[0], 0.92, 3), B(pick(r, CO.sme), 0.92, 3, "sme"), B(names[1], 1.15, 3)]; break;
+    case "innov":
+      bids = [B(names[0], 0.95, 3), B(pick(r, CO.innov), 1.0, 3, "innov"), B(pick(r, CO.cheap), 0.6, 1)];
+      bids[1].desc = item.innov; break;
+    case "collude": {
+      const [a, b] = pick(r, CO.collude);
+      bids = [B(a, 1.28, 3, "collude"), B(b, 1.28, 3, "collude"), B(names[0], 0.97, 3)]; break;
+    }
+    default: { // price, urgent: 품질 같고 값만 다름
+      const ks = shuffle(r, [0.84, 1.0, 1.16]).map(k => k + (r() - 0.5) * 0.04);
+      bids = ks.map((k, j) => B(names[j], k, 3));
+    }
+  }
+  bids = shuffle(r, bids);
+  const best = bestBid(spec.kind, bids);
+  return { ...spec, item, p0, bids, best, bestSaved: p0 - bids[best].price };
+}
+
+// 가장 좋은 선택: 저품질·담합 제외. sme/innov 주문이면 그 표시가 붙은 곳. 아니면 가장 싼 곳.
+export function bestBid(kind, bids) {
+  const ok = bids.map((b, i) => [b, i]).filter(([b]) => b.q > 1 && b.tag !== "collude");
+  const want = kind === "sme" ? "sme" : kind === "innov" ? "innov" : "";
+  const tagged = want && ok.find(([b]) => b.tag === want);
+  if (tagged) return tagged[1];
+  return ok.sort((x, y) => x[0].price - y[0].price)[0][1];
+}
+
+// 판정: tier good / meh / bad, saved(만원, 음수면 낭비), msg(한 줄), why(처음 한 번 달이가 덧붙이는 설명 키)
+export function judge(o, i) {
+  const b = o.bids[i], saved = o.p0 - b.price, cheapest = Math.min(...o.bids.filter(x => x.q > 1 && x.tag !== "collude").map(x => x.price));
+  const W = n => `${Math.abs(n).toLocaleString()}만원`;
+  if (b.q === 1) return { tier: "bad", saved: -b.price, sat: false, msg: `싸서 샀는데 금방 고장! 다시 사야 해서 ${W(b.price)} 낭비`, why: "quality" };
+  if (b.tag === "collude") return { tier: "bad", saved, sat: true, fair: false, msg: `담합 업체였어요! 세금 ${W(saved)}이 더 나갔어요`, why: "collude" };
+  const base = { saved, sat: true };
+  if (o.kind === "collude") return { ...base, tier: "good", fair: true, caught: true, msg: `담합을 피했어요! 정직한 기업과 계약 · ${W(saved)} 절약`, why: "caught" };
+  if (o.kind === "sme") return b.tag === "sme"
+    ? { ...base, tier: "good", fair: true, msg: `중소기업과 계약! 판로를 넓혀 줬어요`, why: "sme" }
+    : { ...base, tier: "meh", fair: false, msg: b.price > cheapest ? `더 비싼 곳이었어요 (${W(b.price - cheapest)} 더)` : `값·품질이 같다면 중소기업 제품을 먼저!`, why: "smeMiss" };
+  if (o.kind === "innov") return b.tag === "innov"
+    ? { ...base, tier: "good", fair: true, msg: `혁신제품 첫 구매! "${b.desc}"`, why: "innov" }
+    : { ...base, tier: "meh", fair: false, msg: `새 혁신제품을 써 볼 기회였어요`, why: "innovMiss" };
+  if (b.price <= cheapest) return { ...base, tier: "good", msg: `가장 알맞은 곳과 계약! ${W(saved)} 절약`, why: saved > 0 ? "compete" : "" };
+  return { ...base, tier: "meh", msg: `더 싼 곳이 있었어요 (${W(b.price - cheapest)} 더)`, why: "compete" };
+}
+
+// 처음 한 번 달이가 덧붙이는 이유 (출처 번호는 docs/퀴즈_출처.md)
+export const WHY = {
+  compete: "여러 기업이 경쟁하면 값이 내려가. 그래서 조달청은 입찰을 붙여!",
+  quality: "너무 싸고 품질이 낮으면 금방 고장 나. 결국 세금이 두 번 들어.",
+  sme: "공공기관은 구매액의 50% 이상을 중소기업 제품으로 사야 해.",
+  smeMiss: "값과 품질이 같다면 중소기업 제품을 사 주는 게 좋아. 공공기관은 구매액의 50% 이상을 중소기업 제품으로 사야 하거든.",
+  innov: "새로 나온 혁신제품은 조달청이 첫 구매자가 돼. 공공기관이 써 보는 '테스트베드'가 되는 거야.",
+  innovMiss: "혁신제품은 팔 곳을 찾기 어려워. 조달청이 먼저 사 주면 기업이 클 수 있어.",
+  collude: "이름이 비슷하고 값이 똑같이 비싼 곳들, 수상하지 않았어? 짜고 값을 올리는 게 담합이야.",
+  caught: "잘 찾았어! 담합한 업체는 최대 2년까지 공공입찰에 못 나올 수 있어.",
+  late: "기관은 물건이 꼭 필요해서 부탁한 거야. 늦으면 수업이나 출동에 차질이 생겨!",
+};
+
+// 점수: 기관 만족(제때·제대로), 세금 절약(가장 알맞은 선택 대비), 공정·상생(중소·혁신·담합 주문에서 바른 선택)
+export function score(records) {
+  const n = records.length || 1;
+  const sat = records.filter(r => r.sat).length / n;
+  const saved = records.reduce((a, r) => a + (r.saved || 0), 0);
+  const bestSum = records.reduce((a, r) => a + Math.max(0, r.bestSaved), 0) || 1;
+  const tax = Math.max(0, Math.min(1, saved / bestSum));
+  const opp = records.filter(r => ["sme", "innov", "collude"].includes(r.kind));
+  const fair = opp.length ? opp.filter(r => r.fair).length / opp.length : 1;
+  const avg = (sat + tax + fair) / 3;
+  const grade = avg >= 0.9 ? "S" : avg >= 0.75 ? "A" : avg >= 0.55 ? "B" : "C";
+  return {
+    sat, tax, fair, avg, grade, saved,
+    served: records.filter(r => r.sat).length, total: records.length,
+    sme: records.filter(r => r.tag === "sme").length, innov: records.filter(r => r.tag === "innov").length,
+    caught: records.filter(r => r.caught).length, late: records.filter(r => r.late).length,
+    points: Math.round(avg * 1000),
+  };
+}
+</script>
+<script type="text/plain" data-mod="./center_ui.js">// 나르미 조달 센터 화면: 시작, 점수판, 기관 위 주문 말풍선, 입찰 시트, 달이 대화, 하루 정리, 결과.
+import { ORGS, GRADE_LINE, FINAL_LINE } from "./center_data.js";
+
+const CSS = `
+#ui [hidden] { display:none !important; }
+#ui, #ui * { box-sizing:border-box; }
+#ui { --ink:#1d2a33; --sub:#5b6b78; --tan:#ff8a1f; --tan-soft:#fff1e3; --ok:#1f9d61; --ok-soft:#e5f6ed; --bad:#d8342c; --bad-soft:#fdeaea; --meh:#b7791f; --card:rgba(255,255,255,.96); font-size:16px; color:var(--ink); }
+#ui button { font:inherit; font-weight:800; font-size:17px; border:0; border-radius:14px; padding:13px 0; width:100%; background:var(--tan); color:#fff; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+#ui button.sub { background:#eef2f5; color:var(--ink); margin-top:8px; font-size:15px; padding:11px 0; }
+#ui .hud { position:absolute; left:0; right:0; top:0; display:flex; justify-content:space-between; align-items:flex-start; gap:8px;
+  padding:calc(env(safe-area-inset-top,0px) + 12px) max(14px, env(safe-area-inset-right,0px)) 0 max(14px, env(safe-area-inset-left,0px)); }
+#ui .pill { background:var(--card); border-radius:999px; padding:7px 14px; font-weight:800; box-shadow:0 2px 10px rgba(20,50,80,.12); display:flex; align-items:center; gap:6px; white-space:nowrap; font-size:15px; }
+#ui .pill small { font-weight:700; color:var(--sub); font-size:12px; }
+#ui .pill .won { color:var(--ok); font-variant-numeric:tabular-nums; }
+#ui .pill .won.neg { color:var(--bad); }
+#ui .hud .l, #ui .hud .r { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+#ui .hud .r { justify-content:flex-end; }
+#ui button.snd { width:38px; height:38px; padding:0; border-radius:50%; background:var(--card); color:var(--ink); display:grid; place-items:center; box-shadow:0 2px 10px rgba(20,50,80,.12); flex:none; }
+#ui button.snd svg { width:20px; height:20px; }
+#ui .on { pointer-events:auto; }
+
+/* 주문 말풍선: 기관 위에 뜬다. 테두리 고리가 남은 시간 */
+#ui .bubs { position:absolute; inset:0; }
+#ui .bub { position:absolute; left:0; top:0; width:auto; padding:0; background:none; border-radius:0; pointer-events:auto; transform:translate(-50%,-100%); display:flex; flex-direction:column; align-items:center; transition:opacity .25s; }
+#ui .bub .ring { --k:1; --c:var(--tan); width:62px; height:62px; border-radius:50%; padding:4px; background:conic-gradient(var(--c) calc(var(--k)*360deg), rgba(255,255,255,.55) 0); box-shadow:0 6px 16px rgba(20,50,80,.25); }
+#ui .bub .in { width:100%; height:100%; border-radius:50%; background:#fff; display:grid; place-items:center; font-size:28px; line-height:1; }
+#ui .bub .tag { margin-top:-6px; background:var(--ink); color:#fff; font-size:12px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap; position:relative; }
+#ui .bub::after { content:""; width:0; height:0; border:7px solid transparent; border-top-color:var(--ink); margin-top:-1px; }
+#ui .bub.low .ring { --c:var(--bad); animation:shake .4s infinite; }
+#ui .bub.urgent .tag { background:var(--bad); }
+#ui .bub.urgent .ring { --c:var(--bad); }
+#ui .bub.sel .ring { box-shadow:0 0 0 4px #fff, 0 0 0 8px var(--tan); }
+#ui .bub.pop { animation:pop .35s cubic-bezier(.2,1.6,.4,1) both; }
+#ui .bub.done { pointer-events:none; }
+#ui .bub.done .in { background:var(--ok-soft); }
+#ui .bub.miss .in { background:var(--bad-soft); }
+#ui .bub.fade { opacity:0; }
+@keyframes pop { from { transform:translate(-50%,-60%) scale(.3); opacity:0; } }
+@keyframes shake { 50% { transform:rotate(-6deg); } }
+
+/* 떠오르는 판정 글자 */
+#ui .float { position:absolute; left:0; top:0; transform:translate(-50%,-100%); font-weight:900; font-size:18px; white-space:nowrap; pointer-events:none;
+  text-shadow:0 2px 0 #fff, 0 0 8px #fff, 0 0 2px #fff; animation:up 1.6s ease-out forwards; }
+#ui .float.good { color:var(--ok); } #ui .float.meh { color:var(--meh); } #ui .float.bad { color:var(--bad); }
+@keyframes up { 0% { opacity:0; transform:translate(-50%,-60%); } 12% { opacity:1; transform:translate(-50%,-100%); } 75% { opacity:1; } 100% { opacity:0; transform:translate(-50%,-190%); } }
+
+/* 한 줄 판정 + 달이 한마디 (위쪽) */
+#ui .say { position:absolute; left:50%; top:calc(env(safe-area-inset-top,0px) + 62px); transform:translate(-50%,-8px); width:min(92vw,520px); display:flex; gap:10px; align-items:flex-start;
+  background:var(--card); border-radius:16px; padding:10px 14px; box-shadow:0 6px 20px rgba(20,50,80,.18); opacity:0; transition:opacity .25s, transform .25s; pointer-events:none; border-left:6px solid var(--tan); }
+#ui .say.show { opacity:1; transform:translate(-50%,0); }
+#ui .say.good { border-color:var(--ok); } #ui .say.meh { border-color:var(--meh); } #ui .say.bad { border-color:var(--bad); }
+#ui .say b { display:block; font-size:15px; line-height:1.35; }
+#ui .say p { margin:3px 0 0; font-size:14px; color:#33434f; line-height:1.45; }
+#ui .say p::before { content:"달이 "; color:var(--tan); font-weight:900; }
+
+/* 입찰 시트: 세로 화면은 아래, 가로 화면은 오른쪽 */
+#ui .sheet { position:absolute; left:50%; bottom:0; transform:translate(-50%,105%); width:min(100vw,520px); background:#fff; border-radius:22px 22px 0 0; box-shadow:0 -8px 30px rgba(10,30,50,.25);
+  padding:16px max(16px, env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 14px) max(16px, env(safe-area-inset-left,0px)); transition:transform .28s cubic-bezier(.2,.9,.3,1); pointer-events:auto; }
+#ui .sheet.show { transform:translate(-50%,0); }
+#ui .sh-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+#ui .sh-head .org { font-size:13px; font-weight:800; color:var(--sub); }
+#ui .sh-head h3 { margin:2px 0 2px; font-size:19px; }
+#ui .sh-head .ref { font-size:13px; color:var(--sub); font-weight:700; }
+#ui .sh-head .ref b { color:var(--ink); }
+#ui .sh-head button.x { width:34px; height:34px; padding:0; border-radius:50%; background:#eef2f5; color:var(--ink); font-size:16px; flex:none; }
+#ui .sh-ask { font-size:13px; font-weight:800; color:var(--tan); margin:10px 0 6px; }
+#ui .bids { display:grid; gap:8px; }
+#ui .bid { display:grid; grid-template-columns:1fr auto; grid-template-areas:"co pr" "q pr" "d d"; align-items:center; gap:2px 10px; text-align:left; background:#f4f7fa; color:var(--ink); padding:11px 14px; border-radius:14px; border:2px solid transparent; font-size:15px; }
+#ui .bid:active { border-color:var(--tan); background:var(--tan-soft); }
+#ui .bid .co { grid-area:co; font-weight:900; font-size:16px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+#ui .bid .chip { font-size:11px; font-weight:800; padding:2px 7px; border-radius:999px; }
+#ui .chip.sme { background:#dff3e3; color:#1e7a3d; } #ui .chip.innov { background:#fff3cf; color:#9a6a00; }
+#ui .bid .q { grid-area:q; font-size:14px; letter-spacing:1px; color:#f2a33b; }
+#ui .bid .q i { color:#cdd5dc; font-style:normal; }
+#ui .bid .q small { letter-spacing:0; color:var(--sub); font-weight:700; margin-left:4px; font-size:12px; }
+#ui .bid .pr { grid-area:pr; text-align:right; font-size:20px; font-weight:900; font-variant-numeric:tabular-nums; line-height:1.1; }
+#ui .bid .pr small { font-size:12px; font-weight:700; color:var(--sub); }
+#ui .bid .pr em { display:block; font-style:normal; font-size:12px; font-weight:800; }
+#ui .bid .pr em.dn { color:var(--ok); } #ui .bid .pr em.up { color:var(--bad); } #ui .bid .pr em.eq { color:var(--sub); }
+#ui .bid .d { grid-area:d; font-size:13px; color:#7a5a00; font-weight:700; margin-top:3px; }
+#ui .sheet .timer { height:6px; border-radius:3px; background:#eef2f5; overflow:hidden; margin-top:12px; }
+#ui .sheet .timer b { display:block; height:100%; background:var(--tan); width:100%; }
+
+/* 큰 글자 안내 */
+#ui .banner { position:absolute; left:0; right:0; top:30%; text-align:center; font-size:clamp(28px,7vw,48px); font-weight:900; color:#fff;
+  text-shadow:0 3px 0 rgba(0,0,0,.12), 0 6px 24px rgba(30,60,90,.45); opacity:0; transition:opacity .35s; pointer-events:none; }
+#ui .banner small { display:block; font-size:clamp(14px,3.6vw,20px); font-weight:800; margin-top:6px; }
+#ui .banner.show { opacity:1; }
+#ui .banner.alert { color:#fff; text-shadow:0 3px 0 #a1271b, 0 6px 24px rgba(160,30,20,.5); }
+
+/* 대화·정리·결과 카드 */
+#ui .screen { position:absolute; inset:0; display:grid; place-items:end center; padding:20px max(16px, env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 16px) max(16px, env(safe-area-inset-left,0px));
+  background:linear-gradient(rgba(16,40,64,0) 30%, rgba(16,40,64,.35)); overflow:auto; pointer-events:auto; }
+#ui .card { background:#fff; border-radius:22px; padding:20px 20px 18px; width:min(92vw,430px); box-shadow:0 12px 40px rgba(10,30,50,.3); text-align:left; }
+#ui .who { display:inline-block; background:var(--tan); color:#fff; font-weight:800; font-size:12px; border-radius:999px; padding:3px 10px; margin-bottom:8px; }
+#ui .card h3 { margin:2px 0 6px; font-size:18px; }
+#ui .card p { margin:0 0 6px; line-height:1.6; color:#33434f; font-size:15px; }
+#ui .rule { background:#1d2a55; color:#fff; border-radius:12px; padding:9px 12px; font-size:14px; font-weight:700; margin:8px 0 12px; }
+#ui .factbox { background:#f6f8fa; border-radius:14px; padding:12px 14px; margin:10px 0 14px; }
+#ui .factbox small { color:var(--tan); font-weight:800; font-size:12px; }
+#ui .factbox h3 { margin:2px 0 4px; }
+#ui .factbox p { margin:0; font-size:14px; }
+#ui .day-stats { display:flex; gap:6px; flex-wrap:wrap; margin:4px 0 2px; }
+#ui .day-stats span { background:#f1f4f7; border-radius:999px; padding:5px 10px; font-size:13px; font-weight:800; }
+#ui .meters { display:grid; gap:9px; margin:12px 0 14px; }
+#ui .meter { display:grid; grid-template-columns:5.6em 1fr 3em; align-items:center; gap:8px; font-size:14px; font-weight:800; }
+#ui .meter .bar { height:10px; border-radius:5px; background:#eef2f5; overflow:hidden; }
+#ui .meter .bar b { display:block; height:100%; border-radius:5px; background:var(--tan); width:0; transition:width 1s .3s ease-out; }
+#ui .meter span:last-child { text-align:right; font-variant-numeric:tabular-nums; color:var(--sub); }
+#ui .did { background:#f6f8fa; border-radius:14px; padding:12px 14px; margin-bottom:12px; }
+#ui .did small { color:var(--tan); font-weight:900; font-size:12px; }
+#ui .did ul { margin:6px 0 0; padding:0; list-style:none; display:grid; gap:4px; font-size:15px; font-weight:700; }
+#ui .did li b { color:var(--ok); }
+#ui .final { border:2px solid var(--tan); border-radius:14px; padding:10px 14px; font-weight:800; line-height:1.55; margin-bottom:14px; font-size:15px; }
+#ui .final::before { content:"달이"; display:block; color:var(--tan); font-size:12px; }
+#ui .gradebox { display:flex; align-items:center; gap:14px; }
+#ui .grade { font-size:60px; font-weight:900; color:var(--tan); line-height:1; animation:stamp .55s .25s both; }
+#ui .gradebox h2 { margin:0; font-size:15px; color:var(--sub); }
+#ui .gradebox .gl { font-weight:900; font-size:18px; margin-top:2px; }
+@keyframes stamp { 0% { opacity:0; transform:scale(2.8) rotate(-16deg); } 70% { opacity:1; transform:scale(.92) rotate(3deg); } 100% { transform:none; } }
+
+/* 첫 화면 */
+#ui .title { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:space-between; align-items:center; pointer-events:auto;
+  padding:calc(env(safe-area-inset-top,0px) + max(7vh, 60px)) max(16px, env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 18px) max(16px, env(safe-area-inset-left,0px));
+  background:linear-gradient(rgba(16,40,64,.18), rgba(16,40,64,0) 35%, rgba(16,40,64,0) 55%, rgba(16,40,64,.3)); }
+#ui .logo { text-align:center; animation:drop .7s cubic-bezier(.2,1.4,.4,1) both; }
+#ui .logo small { display:inline-block; background:var(--tan); color:#fff; font-weight:800; font-size:13px; padding:5px 12px; border-radius:999px; letter-spacing:.4px; }
+#ui .logo h1 { margin:12px 0 0; font-size:clamp(42px, 12vw, 72px); line-height:1.04; font-weight:900; color:#fff; letter-spacing:-2px; text-shadow:0 4px 0 var(--tan), 0 14px 30px rgba(20,50,80,.35); }
+#ui .panel { width:min(92vw,380px); background:var(--card); border-radius:22px; padding:16px; box-shadow:0 12px 40px rgba(10,30,50,.25); text-align:center; animation:rise .6s .15s both ease-out; }
+#ui .panel p { margin:0 0 12px; font-size:14px; line-height:1.55; color:#33434f; text-align:left; }
+#ui .panel .best { font-size:13px; color:var(--sub); font-weight:700; margin-top:10px; }
+#ui .panel .best b { color:var(--tan); }
+@keyframes drop { from { opacity:0; transform:translateY(-24px) scale(.92); } }
+@keyframes rise { from { opacity:0; transform:translateY(24px); } }
+
+@media (min-aspect-ratio: 1/1) {
+  #ui .sheet { left:auto; right:max(12px, env(safe-area-inset-right,0px)); bottom:12px; top:auto; width:min(420px, 46vw); border-radius:22px; transform:translate(0,110%); padding-bottom:14px; }
+  #ui .sheet.show { transform:none; }
+  #ui .screen { place-items:center end; padding-right:max(5vw, env(safe-area-inset-right,0px)); background:linear-gradient(90deg, rgba(16,40,64,0) 35%, rgba(16,40,64,.35)); }
+  #ui .title { align-items:flex-start; padding-left:max(6vw, env(safe-area-inset-left,0px)); padding-top:calc(env(safe-area-inset-top,0px) + 56px); }
+  #ui .logo { text-align:left; }
+  #ui .logo h1 { font-size:clamp(40px, 10vh, 72px); }
+}
+@media (max-height: 560px) {
+  #ui .card { padding:14px 16px 12px; max-height:calc(100vh - 24px); overflow:auto; }
+  #ui .card p { font-size:14px; line-height:1.5; }
+  #ui .bid { padding:7px 12px; }
+  #ui .grade { font-size:44px; }
+  #ui .meters { gap:5px; margin:8px 0; }
+  #ui button { padding:10px 0; font-size:16px; }
+  #ui .panel p { display:none; }
+}
+`;
+const ICON_ON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>`;
+const ICON_OFF = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6"/></svg>`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const W = n => Math.abs(Math.round(n)).toLocaleString();
+const stars = q => "★".repeat(q) + `<i>${"★".repeat(3 - q)}</i>`;
+
+export function createCenterUI(opt = {}) {
+  const S = (k, ...a) => opt.sfx?.(k, ...a);
+  let muted = !!opt.muted;
+  const sndBtn = (style = "") => `<button class="snd on" aria-label="소리 켜고 끄기" style="${style}">${muted ? ICON_OFF : ICON_ON}</button>`;
+  const root = document.getElementById("ui");
+  const style = document.createElement("style"); style.textContent = CSS; document.head.appendChild(style);
+  root.innerHTML = `
+    <div class="bubs"></div>
+    <div class="hud" hidden>
+      <div class="l"><div class="pill"><small class="day">1일차</small></div><div class="pill"><small>세금 절약</small><span class="won">0</span><small>만원</small></div></div>
+      <div class="r"><div class="pill"><small>납품</small><span class="srv">0</span></div>${sndBtn()}</div>
+    </div>
+    <div class="say"></div><div class="banner"></div>
+    <div class="sheet"></div><div class="layer"></div>`;
+  const $ = s => root.querySelector(s);
+  const bubs = $(".bubs"), hud = $(".hud"), say = $(".say"), banner = $(".banner"), sheet = $(".sheet"), layer = $(".layer");
+  let sayT = 0, bannerT = 0, talkT = null, sheetT = null;
+  root.addEventListener("click", e => {
+    const b = e.target.closest?.("button.snd"); if (!b) return;
+    e.stopPropagation(); muted = opt.onMute ? opt.onMute() : !muted;
+    root.querySelectorAll("button.snd").forEach(x => x.innerHTML = muted ? ICON_OFF : ICON_ON);
+    if (!muted) S("click");
+  });
+  const on = (el, sel, fn) => { const b = el.querySelector(sel); if (b) b.onclick = e => { e.stopPropagation(); S("click"); fn(); }; };
+  // 점수판이 보이면 그쪽 소리 버튼을 쓰고, 숨었을 때만 카드 화면에 따로 단다
+  const screen = html => { layer.innerHTML = `<div class="screen">${hud.hidden ? sndBtn("position:absolute;right:max(14px, env(safe-area-inset-right,0px));top:calc(env(safe-area-inset-top,0px) + 12px)") : ""}<div class="card">${html}</div></div>`; return layer.querySelector(".card"); };
+
+  // 타자 효과: 글자가 달이 입에 맞춰 나온다(초당 34자). 카드를 누르면 바로 전부.
+  function typewriter(card, parts, after) {
+    const total = parts.reduce((a, [, t]) => a + t.length, 0);
+    let shown = 0;
+    const paint = () => { let n = shown; for (const [el, t] of parts) { el.textContent = t.slice(0, Math.max(0, n)); n -= t.length; } };
+    const reveal = () => { shown = total; paint(); ui.talking = ""; talkT = null; after?.(); };
+    card.onclick = e => { if (!e.target.closest("button")) reveal(); };
+    talkT = dt => {
+      shown = Math.min(total, shown + dt * 34); paint();
+      let n = Math.floor(shown), ch = ""; for (const [, t] of parts) { if (n < t.length) { ch = t[n] || ""; break; } n -= t.length; }
+      ui.talking = shown < total ? (ch || "a") : "";
+      if (shown >= total) { talkT = null; after?.(); }
+    };
+    return reveal;
+  }
+
+  const bubEls = new Map();
+  const ui = {
+    talking: "",
+    get sheetOpen() { return sheet.classList.contains("show"); },
+    get busy() { return layer.childElementCount > 0; },
+    hud(show) { hud.hidden = !show; },
+    setDay(t) { $(".day").textContent = t; },
+    setStats({ saved, served, total }) {
+      const w = $(".won"); w.textContent = (saved < 0 ? "-" : "") + W(saved); w.classList.toggle("neg", saved < 0);
+      $(".srv").textContent = `${served}/${total}`;
+    },
+    // 말풍선 맞추기. list: {id, emoji, label, k(남은 비율), urgent, x, y, state: wait|done|miss, sel}
+    bubbles(list, onTap) {
+      const seen = new Set();
+      for (const b of list) {
+        seen.add(b.id);
+        let el = bubEls.get(b.id);
+        if (!el) {
+          el = document.createElement("button"); el.className = "bub pop";
+          el.innerHTML = `<div class="ring"><div class="in">${b.emoji}</div></div><div class="tag">${esc(b.label)}</div>`;
+          el.onclick = e => { e.stopPropagation(); if (el.dataset.state === "wait") onTap(b.id); };
+          bubs.appendChild(el); bubEls.set(b.id, el);
+        }
+        el.dataset.state = b.state;
+        el.style.left = b.x + "px"; el.style.top = b.y + "px";
+        el.querySelector(".ring").style.setProperty("--k", Math.max(0, b.k).toFixed(3));
+        el.classList.toggle("low", b.state === "wait" && b.k < 0.3);
+        el.classList.toggle("urgent", !!b.urgent);
+        el.classList.toggle("sel", !!b.sel);
+        el.classList.toggle("done", b.state === "done");
+        el.classList.toggle("miss", b.state === "miss");
+        el.classList.toggle("fade", !!b.fade);
+        if (b.state !== "wait") el.querySelector(".in").textContent = b.state === "done" ? "✅" : "😢";
+      }
+      for (const [id, el] of bubEls) if (!seen.has(id)) { el.remove(); bubEls.delete(id); }
+    },
+    float(text, x, y, tier) {
+      const el = document.createElement("div"); el.className = "float " + tier; el.textContent = text;
+      el.style.left = x + "px"; el.style.top = y + "px"; bubs.appendChild(el); setTimeout(() => el.remove(), 1700);
+    },
+    // 위쪽 한 줄: 판정 + 달이의 이유(있을 때)
+    say(msg, why, tier = "good", secs) {
+      say.className = "say show " + tier;
+      say.innerHTML = `<div><b>${esc(msg)}</b>${why ? `<p>${esc(why)}</p>` : ""}</div>`;
+      sayT = secs ?? (why ? 4.2 : 2.2);
+    },
+    banner(title, sub = "", secs = 2.2, alert = false) {
+      banner.className = "banner show" + (alert ? " alert" : "");
+      banner.innerHTML = esc(title) + (sub ? `<small>${esc(sub)}</small>` : ""); bannerT = secs;
+    },
+    // 입찰 시트. o = 주문, left() = 남은 비율, onPick(i), onClose()
+    openSheet(o, left, onPick, onClose) {
+      const org = ORGS[o.org];
+      sheet.innerHTML = `<div class="sh-head"><div><div class="org">${org.emoji} ${esc(org.name)}${o.kind === "urgent" ? ` · <span style="color:var(--bad)">긴급!</span>` : ""}</div>
+          <h3>${o.item.e} ${esc(o.item.n)}</h3><div class="ref">적정가 <b>${W(o.p0)}만원</b></div></div><button class="x" aria-label="닫기">✕</button></div>
+        <div class="sh-ask">어느 기업과 계약할까요?</div>
+        <div class="bids">${o.bids.map((b, i) => {
+          const d = Math.round((b.price / o.p0 - 1) * 100);
+          const diff = d < 0 ? `<em class="dn">적정가보다 ${-d}%↓</em>` : d > 0 ? `<em class="up">적정가보다 ${d}%↑</em>` : `<em class="eq">적정가</em>`;
+          const chip = b.tag === "sme" ? `<span class="chip sme">🌱 중소기업</span>` : b.tag === "innov" ? `<span class="chip innov">💡 혁신제품</span>` : "";
+          return `<button class="bid" data-i="${i}"><div class="co">${esc(b.name)}${chip}</div>
+            <div class="q">${stars(b.q)}<small>품질</small></div>
+            <div class="pr">${W(b.price)}<small>만원</small>${diff}</div>${b.desc ? `<div class="d">💡 ${esc(b.desc)}</div>` : ""}</button>`;
+        }).join("")}</div><div class="timer"><b></b></div>`;
+      sheet.classList.add("show");
+      sheet.querySelectorAll(".bid").forEach(el => el.onclick = e => { e.stopPropagation(); onPick(+el.dataset.i); });
+      on(sheet, ".x", onClose);
+      const bar = sheet.querySelector(".timer b");
+      sheetT = () => { bar.style.width = (Math.max(0, left()) * 100).toFixed(1) + "%"; };
+      ui._pick = onPick; // 시험용
+    },
+    closeSheet() { sheet.classList.remove("show"); sheetT = null; },
+    // 달이 대화: lines(문장 배열), rule(선택), btn(나르미 대답)
+    talk({ tag = "달이", title = "", lines, rule = "", fact = null, stats = "", btn = "알겠어!" }, done) {
+      const c = screen(`<span class="who">${esc(tag)}</span>${title ? `<h3>${esc(title)}</h3>` : ""}${stats}
+        ${lines.map(() => `<p></p>`).join("")}
+        ${fact ? `<div class="factbox" style="opacity:0;transition:opacity .3s"><small>오늘 배운 조달</small><h3>${esc(fact.title)}</h3><p>${esc(fact.text)}</p></div>` : ""}
+        ${rule ? `<div class="rule" style="opacity:0;transition:opacity .3s">${esc(rule)}</div>` : ""}
+        <button class="go">나르미: ${esc(btn)}</button>`);
+      const ps = [...c.querySelectorAll("p")].slice(0, lines.length);
+      const extra = [c.querySelector(".factbox"), c.querySelector(".rule")].filter(Boolean);
+      const show = () => extra.forEach(el => el.style.opacity = 1);
+      const reveal = typewriter(c, ps.map((p, i) => [p, lines[i]]), show);
+      on(c, ".go", () => { reveal(); talkT = null; ui.talking = ""; layer.innerHTML = ""; done(); });
+      ui._go = () => c.querySelector(".go").click(); // 시험용
+    },
+    title(info, onGo) {
+      layer.innerHTML = `<div class="title">${sndBtn("position:absolute;right:max(14px, env(safe-area-inset-right,0px));top:calc(env(safe-area-inset-top,0px) + 12px)")}
+        <div class="logo"><small>2026 조달청 공공조달 게임</small><h1>나르미<br>조달 센터</h1></div>
+        <div class="panel"><p>학교·소방서·보건소·도서관이 필요한 물건을 부탁해요. <b>좋은 기업을 골라 계약</b>하면 나르미가 날아가 배달해요. 선배 달이와 함께하는 사흘간의 조달청 근무!</p>
+        <button class="go">출근하기</button>${info.best ? `<div class="best">최고 등급 <b>${esc(info.best)}</b></div>` : ""}</div></div>`;
+      on(layer, ".go", () => { layer.innerHTML = ""; onGo(); });
+      ui._go = () => layer.querySelector(".go").click();
+    },
+    result(sc, onAgain) {
+      const pct = k => Math.round(k * 100) + "%";
+      const c = screen(`<div class="gradebox"><div class="grade">${sc.grade}</div><div><h2>사흘 근무 끝!</h2><div class="gl">${GRADE_LINE[sc.grade]}</div></div></div>
+        <div class="meters">
+          <div class="meter"><span>기관 만족</span><div class="bar"><b style="--w:${pct(sc.sat)}"></b></div><span>${pct(sc.sat)}</span></div>
+          <div class="meter"><span>세금 절약</span><div class="bar"><b style="--w:${pct(sc.tax)}"></b></div><span>${pct(sc.tax)}</span></div>
+          <div class="meter"><span>공정·상생</span><div class="bar"><b style="--w:${pct(sc.fair)}"></b></div><span>${pct(sc.fair)}</span></div>
+        </div>
+        <div class="did"><small>나르미가 사흘 동안 한 일 = 조달청이 하는 일</small><ul>
+          <li>🏫 공공기관 주문 ${sc.total}건 중 <b>${sc.served}건</b> 제대로 납품</li>
+          <li>💰 세금 <b>${(sc.saved < 0 ? "-" : "") + W(sc.saved)}만원</b> ${sc.saved < 0 ? "낭비" : "절약"}</li>
+          <li>🌱 중소기업 <b>${sc.sme}곳</b> · 💡 혁신제품 <b>${sc.innov}건</b> 계약</li>
+          <li>🚨 담합 <b>${sc.caught}건</b> 걸러 냄</li>
+        </ul></div>
+        <div class="final">${esc(FINAL_LINE)}</div>
+        <button class="again">다시 출근하기</button>`);
+      requestAnimationFrame(() => requestAnimationFrame(() => c.querySelectorAll(".meter .bar b").forEach(b => b.style.width = b.style.getPropertyValue("--w"))));
+      on(c, ".again", () => { layer.innerHTML = ""; onAgain(); });
+      ui._go = () => c.querySelector(".again").click();
+    },
+    update(dt) {
+      if (sayT > 0 && (sayT -= dt) <= 0) say.classList.remove("show");
+      if (bannerT > 0 && (bannerT -= dt) <= 0) banner.classList.remove("show");
+      if (talkT) talkT(dt);
+      if (sheetT) sheetT();
+    },
+    clear() { layer.innerHTML = ""; talkT = null; ui.talking = ""; ui.closeSheet(); ui.bubbles([], () => {}); say.classList.remove("show"); },
+  };
+  return ui;
 }
 </script>
 <script type="text/plain" data-mod="./characters.js">// 나르미·달이: 공식 캐릭터(조달청 블로그 첨부 3D 렌더·턴어라운드)를 기본 도형으로 옮긴 모델.
@@ -598,6 +1568,12 @@ export function createFx(scene) {
       mesh.instanceMatrix.needsUpdate = true;
       lines.update(dt, speed);
     },
+    // 아무 위치에서 터지기 (조달 센터용): kind = "ok"(색종이) · "bad"(먹구름) · "pick"(반짝)
+    burst(pos, kind = "ok") {
+      if (kind === "bad") emit(14, pos, { pal: "hit", speed: 2.5, up: 1, life: 0.9, size: 1.6, drag: 2.5, flow: 0, grow: 1, spread: 0.6 });
+      else if (kind === "pick") emit(16, pos, { pal: "innov", speed: 4, life: 0.6, size: 1.1, drag: 3, flow: 0 });
+      else emit(40, pos, { pal: "ring", speed: 6, up: 3, life: 1.1, size: 1.1, g: -9, drag: 1.5, flow: 0 });
+    },
     clear() { P.forEach(a => a.life = 0); },
   };
 
@@ -861,6 +1837,8 @@ import { createFx } from "./fx.js";
 const q = new URLSearchParams(location.search);
 if (q.has("view")) {
   await import("./showcase.js");
+} else if (q.has("center")) {
+  (await import("./center.js")).startCenter();
 } else {
   startGame();
 }
@@ -1228,7 +2206,7 @@ const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness
 const boxG = new THREE.BoxGeometry(1, 1, 1), sphG = new THREE.SphereGeometry(1, 14, 10);
 
 // 둥근 모서리 판 글자 (기관 이름표)
-function labelTexture(text, bg = "#ff8a1f", fg = "#ffffff") {
+export function labelTexture(text, bg = "#ff8a1f", fg = "#ffffff") {
   const c = document.createElement("canvas"); c.width = 512; c.height = 160;
   const g = c.getContext("2d");
   g.fillStyle = bg; g.beginPath(); g.roundRect(8, 8, 496, 144, 72); g.fill();
@@ -1265,7 +2243,7 @@ function logoMat() {
   }
   return _logo;
 }
-function makeBox(type) {
+export function makeBox(type) {
   const g = new THREE.Group();
   const [body, band, mark] = type === "innov" ? [M.white, M.gold, M.gold] : type === "sme" ? [M.sme, M.smeBand, M.smeBand] : [M.kraft, M.tape, M.label];
   const b = new THREE.Mesh(boxG, body); b.scale.setScalar(1.05); b.castShadow = true; g.add(b);
@@ -1338,7 +2316,7 @@ function makeRing(org) {
   return g;
 }
 
-function makeBuilding(org) {
+export function makeBuilding(org) {
   const g = new THREE.Group();
   const add = (mat, sx, sy, sz, x, y, z) => { const m = new THREE.Mesh(boxG, mat); m.scale.set(sx, sy, sz); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; g.add(m); return m; };
   const plaza = add(std(0xd9d4c7), 18, 0.2, 14, 0, 0.1, 0);
