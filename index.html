@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-20T07:17:09.553Z">
+<meta name="build" content="2026-11-20T07:25:16.921Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -666,6 +666,7 @@ export function createLearn() {
   let fresh = [];          // 이번 판에 도감에 새로 들어간 카드
   const cursor = {};       // 주제별 다음 자막 위치
   let summarized = new Set();
+  let read = new Set();    // 이번 판에 내용까지 읽을 수 있었던 카드(출발 브리핑, 쉬는 시간 설명) → 퀴즈는 여기서
 
   function see(id) {
     if (!shown.has(id)) { order.push(id); if (!dex.has(id)) { dex.add(id); fresh.push(id); saveDex(dex); } }
@@ -674,8 +675,10 @@ export function createLearn() {
   }
 
   return {
-    reset() { shown = new Map(); order = []; fresh = []; summarized = new Set(); for (const k in cursor) delete cursor[k]; },
+    reset() { shown = new Map(); order = []; fresh = []; summarized = new Set(); read = new Set(); for (const k in cursor) delete cursor[k]; },
     see,
+    // 내용을 읽을 시간이 있었던 카드로 표시
+    read(id) { read.add(id); return see(id); },
     // 주제의 다음 카드(한 판에서 같은 주제 카드를 돌아가며 보여 준다)
     line(topic) {
       const list = CARDS.filter(c => c.topic === topic);
@@ -688,12 +691,13 @@ export function createLearn() {
       const c = [...shown.entries()].filter(([id]) => !summarized.has(id))
         .sort((a, b) => b[1] - a[1] || order.indexOf(b[0]) - order.indexOf(a[0]))[0];
       if (!c) return null;
-      summarized.add(c[0]);
+      summarized.add(c[0]); read.add(c[0]);
       return see(c[0]);
     },
-    // 퀴즈: 이번 판에 본 카드에서만. 부딪힌 장애물 주제가 있으면 그 주제를 먼저.
+    // 퀴즈: 이번 판에 내용을 읽은 카드에서만(없으면 본 카드). 부딪힌 장애물 주제가 있으면 그 주제를 먼저.
     quiz(topic) {
-      const seen = order.map(id => BY_ID[id]);
+      const all = order.map(id => BY_ID[id]), rd = all.filter(c => read.has(c.id));
+      const seen = rd.length ? rd : all;
       const pool = seen.filter(c => c.topic === topic);
       const from = pool.length ? pool : seen;
       if (!from.length) return null;
@@ -715,13 +719,13 @@ export function createLearn() {
 
 export const SLOTS = [-3.6, -1.8, 0, 1.8, 3.6];
 
-// 구간: 아침 → 낮 → 노을. 구간 사이 3초는 쉬는 시간(나중에 달이의 정리 화면).
+// 구간: 아침 → 낮 → 노을. 구간 사이 5초는 장애물 없는 쉬는 시간: 달이가 상식 카드 한 장을 설명한다(피하면서 글을 읽지 않게).
 export const SECTIONS = [
   { name: "아침", start: 0, end: 28, speed: 22, phase: 0 },
-  { name: "낮", start: 31, end: 59, speed: 26, phase: 1 },
-  { name: "노을", start: 62, end: 90, speed: 31, phase: 2 },
+  { name: "낮", start: 33, end: 61, speed: 26, phase: 1 },
+  { name: "노을", start: 66, end: 94, speed: 31, phase: 2 },
 ];
-export const TOTAL = 90;
+export const TOTAL = 94;
 
 // 시각 t의 속도. 쉬는 시간에는 다음 구간 속도로 서서히 올린다.
 export function speedAt(t) {
@@ -854,7 +858,7 @@ if (q.has("view")) {
 
 const VALUE = { box: 10, sme: 10, innov: 20 }; // 배달할 때 상자 한 개 점수
 const RING_BONUS = 20, SME_BONUS = 30;
-const CAPTION_GAP = 3.2;                       // 상식 자막 사이 최소 간격(초)
+const CAPTION_GAP = 4.0;                       // 상식 자막 사이 최소 간격(초)
 const BEST_KEY = "narmi-best-v1";
 const LABEL = { box: "조달 상자", innov: "혁신제품 상자", sme: "중소기업 상자", cloud: "담합 먹구름을 피했어요", plane: "위조 서류를 피했어요" };
 
@@ -899,8 +903,9 @@ function startGame() {
   const input = createInput(r => game.state === "play" && player.drag(r));
 
   function caption(type, extra = "") {
+    // 피하는 중에는 긴 문장을 못 읽으므로 카드 제목만. 내용은 쉬는 시간·결과·도감에서 읽는다.
     const card = learn.line(TOPIC_OF[type]);
-    ui.toast(`<b>${extra || LABEL[type]}</b><br>${card.line}`, 2.8, true);
+    ui.toast(`<b>${extra || LABEL[type]}</b><br><span class="cardget">상식 카드 · ${card.title}</span>`, 2.0, true);
     game.capT = CAPTION_GAP;
   }
 
@@ -956,7 +961,7 @@ function startGame() {
     rings.forEach(r => count[ORG_NAMES[r.org]] = (count[ORG_NAMES[r.org]] || 0) + 1);
     const orders = Object.entries(count).map(([n, c]) => `${n} ${c}곳`);
     const pool = CARDS.filter(c => c.topic === "pps" || c.id === "innov-pilot");
-    const card = learn.see((pool.find(c => !learn.dexHas(c.id)) || pool[Math.floor(Math.random() * pool.length)]).id);
+    const card = learn.read((pool.find(c => !learn.dexHas(c.id)) || pool[Math.floor(Math.random() * pool.length)]).id);
     if (auto) { fly(); return; }
     ui.briefing(orders, card, fly);
   }
@@ -1095,10 +1100,10 @@ function startGame() {
         }
         // 구간 사이 쉬는 시간: 달이가 방금 본 상식 하나를 정리
         for (let i = 0; i < SECTIONS.length - 1; i++) {
-          if (game.t >= SECTIONS[i].end && !game.breakShown.has(i)) {
+          if (game.t >= SECTIONS[i].end + 0.4 && !game.breakShown.has(i)) {
             game.breakShown.add(i);
             const card = learn.summary();
-            if (card) { ui.note(card, 3.0); sfx.note(); }
+            if (card) { ui.note(card, 4.4); sfx.note(); }
           }
         }
         ui.setSection(SECTIONS[si].name, orgsLeft(si));
@@ -1547,6 +1552,7 @@ const CSS = `
 #ui .toast b { color:var(--tan); }
 #ui .toast.show { opacity:1; transform:translate(-50%,6px); }
 #ui .toast.fact { border:2px solid var(--tan); }
+#ui .toast .cardget { font-size:14px; color:var(--sub); }
 #ui .banner { position:absolute; left:0; right:0; top:30%; text-align:center; font-size:clamp(28px,7vw,52px); font-weight:900; color:#fff;
   text-shadow:0 3px 0 rgba(0,0,0,.12), 0 6px 24px rgba(30,60,90,.35); opacity:0; transition:opacity .35s; }
 #ui .banner small { display:block; font-size:clamp(14px,3.6vw,20px); font-weight:700; margin-top:6px; }
