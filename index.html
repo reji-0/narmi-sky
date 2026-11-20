@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-20T04:00:41.967Z">
+<meta name="build" content="2026-11-20T04:24:21.343Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -261,6 +261,104 @@ export function animateDali(d, t, opt = {}) {
   body.rotation.z = Math.sin(t * 1.5) * 0.04;
 }
 </script>
+<script type="text/plain" data-mod="./facts.js">// 상식 카드와 퀴즈. 모든 내용의 출처는 docs/퀴즈_출처.md (src 값이 그 문서의 출처 번호).
+// topic: pps(조달청) · naraj(나라장터) · innov(혁신제품) · sme(중소기업) · fair(담합) · sanction(부정당업자)
+// line: 비행 중 한 줄 자막 / more: 구간 사이 정리·도감 설명 / q: 4지선다(answer가 정답)
+
+export const CARDS = [
+  { id: "pps-role", topic: "pps", title: "조달청이 하는 일",
+    line: "조달청은 공공기관에 필요한 물품을 사고 시설공사 계약을 맡아요",
+    more: "정부와 공공기관이 쓰는 물품을 사 주고, 학교·도로 같은 시설공사 계약도 맡는 곳이 조달청이에요.",
+    q: { ask: "조달청이 하는 일은 무엇일까요?", answer: "공공기관에 필요한 물품 구매와 공사 계약", wrong: ["세금 걷기", "우편물 배달", "날씨 예보"] }, src: [1] },
+  { id: "pps-daejeon", topic: "pps", title: "조달청은 대전에",
+    line: "조달청 본청은 1998년 정부대전청사로 옮겼어요",
+    more: "조달청은 1998년 서울 시대를 마치고 대전의 정부대전청사로 옮겼어요. 나르미가 출발한 곳이에요.",
+    q: { ask: "조달청 본청이 있는 도시는 어디일까요?", answer: "대전", wrong: ["서울", "세종", "부산"] }, src: [1, 2] },
+  { id: "pps-1961", topic: "pps", title: "조달청의 시작",
+    line: "1961년, '조달청'이라는 이름으로 출범했어요",
+    more: "조달청의 뿌리는 1949년 임시외자총국이에요. 1961년 외자청 업무를 이어받아 조달청이 생겼어요.",
+    q: { ask: "'조달청'이라는 이름으로 출범한 해는?", answer: "1961년", wrong: ["1949년", "1998년", "2002년"] }, src: [1, 2] },
+  { id: "pps-scale", topic: "pps", title: "공공조달 238.5조 원",
+    line: "2025년 공공조달 규모는 238.5조 원, 역대 최고예요",
+    more: "2025년 우리나라 공공기관이 물품·용역·공사를 계약한 금액은 238.5조 원으로 역대 가장 많았어요.",
+    q: { ask: "2025년 우리나라 공공조달 규모는 얼마쯤일까요?", answer: "약 238조 원", wrong: ["약 2조 원", "약 24조 원", "약 2,380조 원"] }, src: [3] },
+
+  { id: "naraj-what", topic: "naraj", title: "나라장터",
+    line: "나라장터는 입찰부터 계약·대금 지급까지 온라인으로 하는 곳이에요",
+    more: "나라장터는 국가종합전자조달시스템이에요. 입찰 공고, 업체 등록, 입찰, 계약, 대금 지급을 온라인에서 처리해요.",
+    q: { ask: "나라장터는 무엇일까요?", answer: "국가종합전자조달시스템", wrong: ["전통시장 상인회", "중고거래 앱", "농산물 도매시장"] }, src: [4, 5] },
+  { id: "naraj-2002", topic: "naraj", title: "2002년 개통",
+    line: "나라장터는 2002년에 문을 열었어요",
+    more: "나라장터는 전자정부 과제의 하나로 2002년에 문을 열었어요. 그전에는 조달 업무를 종이 서류로 처리했어요.",
+    q: { ask: "나라장터가 처음 문을 연 해는?", answer: "2002년", wrong: ["1988년", "2010년", "2019년"] }, src: [4, 5] },
+  { id: "naraj-share", topic: "naraj", title: "공공조달의 절반 이상",
+    line: "2025년 공공조달의 61.1%가 나라장터를 거쳤어요",
+    more: "2025년 공공조달 238.5조 원 가운데 145.8조 원(61.1%)이 나라장터에서 거래됐어요.",
+    q: { ask: "2025년 공공조달 중 나라장터를 거친 비율은?", answer: "절반이 넘는 61.1%", wrong: ["10% 정도", "25% 정도", "100% 전부"] }, src: [3] },
+  { id: "naraj-mas", topic: "naraj", title: "다수공급자계약(MAS)",
+    line: "비슷한 제품을 여러 업체와 미리 계약해 두고, 기관이 골라 사요",
+    more: "다수공급자계약은 조달청이 품질·성능이 비슷한 여러 업체와 미리 단가계약을 맺는 제도예요. 기관은 나라장터 쇼핑몰에서 골라 사요.",
+    q: { ask: "다수공급자계약(MAS)은 어떤 제도일까요?", answer: "여러 업체와 미리 계약해 두고 기관이 골라 사는 제도", wrong: ["한 업체에게만 모든 물건을 사는 제도", "외국 제품만 사는 제도", "추첨으로 물건을 나눠 주는 제도"] }, src: [6] },
+
+  { id: "innov-pilot", topic: "innov", title: "혁신제품 시범구매",
+    line: "혁신제품은 조달청이 먼저 사서 공공기관이 써 보게 해요",
+    more: "새로 나온 혁신제품은 팔 곳을 찾기 어려워요. 그래서 조달청이 첫 구매자가 되어 사고, 공공기관이 직접 써 보게 해요. 2019년에 시작했어요.",
+    q: { ask: "혁신제품을 먼저 사서 공공기관이 써 보게 하는 곳은?", answer: "조달청", wrong: ["은행", "방송국", "대형마트"] }, src: [7, 8] },
+  { id: "innov-3yr", topic: "innov", title: "혁신제품 지정 3년",
+    line: "혁신제품으로 지정되면 3년 동안 수의계약으로 팔 수 있어요",
+    more: "혁신제품으로 지정되면 3년 동안 공공기관이 경쟁입찰 없이 수의계약으로 살 수 있어요.",
+    q: { ask: "혁신제품으로 지정되면 몇 년 동안 수의계약이 가능할까요?", answer: "3년", wrong: ["1개월", "1년", "평생"] }, src: [8, 9] },
+  { id: "innov-market", topic: "innov", title: "혁신장터",
+    line: "혁신제품은 전용몰 '혁신장터'에 올라가요",
+    more: "지정된 혁신제품은 혁신제품 전용몰인 '혁신장터'에 등록돼요. 공공기관은 여기서 혁신제품을 찾아 사요.",
+    q: { ask: "혁신제품 전용 쇼핑몰의 이름은?", answer: "혁신장터", wrong: ["벤처나라", "나라마켓", "공공상점"] }, src: [8, 9] },
+  { id: "innov-testbed", topic: "innov", title: "공공기관은 테스트베드",
+    line: "공공기관이 혁신제품을 먼저 써 보고 결과를 나눠요",
+    more: "시범구매한 혁신제품은 공공기관이 실제로 써 보고 결과를 공유해요. 공공기관이 '테스트베드'가 되는 셈이에요.",
+    q: { ask: "혁신제품 시범구매에서 공공기관이 맡는 역할은?", answer: "직접 써 보는 테스트베드", wrong: ["제품을 만드는 공장", "제품 광고 모델", "제품을 되파는 판매점"] }, src: [7] },
+
+  { id: "sme-50", topic: "sme", title: "중소기업 제품 50%",
+    line: "공공기관은 총 구매액의 50% 이상을 중소기업 제품으로 사야 해요",
+    more: "판로지원법에 따라 공공기관은 총 구매액의 50% 이상을 중소기업 제품으로 사야 해요. 중소기업이 판로를 넓히도록 돕는 거예요.",
+    q: { ask: "공공기관이 중소기업 제품으로 사야 하는 비율은?", answer: "총 구매액의 50% 이상", wrong: ["5% 이상", "10% 이상", "정해진 비율 없음"] }, src: [10] },
+  { id: "sme-venture", topic: "sme", title: "벤처나라",
+    line: "벤처나라는 창업·벤처기업 제품 전용 쇼핑몰이에요",
+    more: "조달청은 2016년 창업·벤처기업 제품 전용몰 '벤처나라'를 열었어요. 기술 좋은 새 기업이 공공시장에 들어오도록 돕는 곳이에요.",
+    q: { ask: "창업·벤처기업 제품 전용 쇼핑몰의 이름은?", answer: "벤처나라", wrong: ["혁신장터", "스타트몰", "나라장터 해외관"] }, src: [11] },
+  { id: "sme-excellent", topic: "sme", title: "우수조달물품",
+    line: "기술·품질이 뛰어난 제품은 '우수조달물품'으로 지정돼요",
+    more: "조달청은 기술·품질이 뛰어난 중소·벤처기업 제품을 우수조달물품으로 지정해요. 지정되면 수의계약으로 공공기관에 팔 수 있어요.",
+    q: { ask: "기술·품질이 뛰어난 제품을 지정하는 조달청 제도는?", answer: "우수조달물품 지정", wrong: ["올해의 상품 투표", "베스트셀러 인증", "명품 마크"] }, src: [12] },
+
+  { id: "fair-what", topic: "fair", title: "입찰 담합",
+    line: "입찰 담합은 업체끼리 미리 짜고 낙찰자나 가격을 정하는 것이에요",
+    more: "입찰 담합은 경쟁해야 할 업체들이 몰래 짜고 누가 낙찰받을지, 얼마에 낼지 정하는 거예요. 공정거래법이 금지해요.",
+    q: { ask: "입찰 담합이란 무엇일까요?", answer: "업체끼리 미리 짜고 낙찰자나 가격을 정하는 것", wrong: ["가장 싼 업체가 공정하게 이기는 것", "여러 업체가 함께 박람회를 여는 것", "입찰 서류를 일찍 내는 것"] }, src: [13, 14] },
+  { id: "fair-brias", topic: "fair", title: "담합 징후 분석",
+    line: "공정위는 징후분석 시스템으로 공공입찰 담합을 찾아내요",
+    more: "공정거래위원회는 공공입찰 자료를 분석하는 입찰담합 징후분석 시스템으로 담합 정황을 찾아내요.",
+    q: { ask: "공공입찰 담합을 찾아내는 데 쓰는 것은?", answer: "입찰담합 징후분석 시스템", wrong: ["제비뽑기", "업체 인기투표", "날씨 데이터"] }, src: [14, 15] },
+  { id: "fair-limit", topic: "fair", title: "담합하면 입찰 제한",
+    line: "담합하면 공공입찰 참가자격이 최대 2년 제한될 수 있어요",
+    more: "담합한 업체는 과징금을 낼 뿐 아니라 공공입찰 참가자격을 최대 2년까지 제한받을 수 있어요.",
+    q: { ask: "담합한 업체가 받을 수 있는 공공입찰 참가자격 제한은 최대 얼마?", answer: "2년", wrong: ["1주일", "1개월", "제한 없음"] }, src: [13, 16] },
+
+  { id: "sanction-forge", topic: "sanction", title: "위조·허위 서류",
+    line: "입찰 서류를 위조하거나 거짓으로 내면 입찰 참가가 제한돼요",
+    more: "입찰이나 계약 서류를 위조·변조하거나 허위 서류를 내면 '부정당업자'가 되어 입찰 참가자격이 제한돼요.",
+    q: { ask: "입찰 서류를 위조하면 어떻게 될까요?", answer: "부정당업자로 입찰 참가자격이 제한된다", wrong: ["점수를 더 받는다", "아무 일도 없다", "우수제품으로 지정된다"] }, src: [16, 17] },
+  { id: "sanction-all", topic: "sanction", title: "모든 공공입찰에서",
+    line: "참가자격이 제한되면 다른 공공기관 입찰에도 못 나가요",
+    more: "입찰 참가자격 제한을 받으면 처분한 기관뿐 아니라 다른 국가기관·지방자치단체·공기업 입찰에도 참가할 수 없어요.",
+    q: { ask: "입찰 참가자격 제한을 받으면 어디 입찰에 못 나갈까요?", answer: "다른 공공기관 입찰까지 모두", wrong: ["처분한 기관 한 곳만", "민간 회사 입찰만", "해외 입찰만"] }, src: [16, 18] },
+];
+
+export const BY_ID = Object.fromEntries(CARDS.map(c => [c.id, c]));
+
+// 물건 종류 → 자막에 쓸 주제
+export const TOPIC_OF = { box: "naraj", innov: "innov", sme: "sme", cloud: "fair", plane: "sanction", ring: "naraj" };
+export const TOPIC_NAME = { pps: "조달청", naraj: "나라장터", innov: "혁신제품", sme: "중소기업", fair: "공정조달", sanction: "부정당업자 제재" };
+</script>
 <script type="text/plain" data-mod="./input.js">// 입력: 자유 이동. 폰은 손가락을 끄는 만큼 따라오고, PC는 ←/→, A/D를 누르고 있는 동안 움직인다.
 // onDrag(비율): 화면 너비 대비 이번에 끈 거리. axis(): 키보드 방향(-1, 0, 1).
 export function createInput(onDrag, onTap) {
@@ -294,6 +392,64 @@ export function createInput(onDrag, onTap) {
   addEventListener("pointercancel", end);
 
   return { axis: () => (held.r ? 1 : 0) - (held.l ? 1 : 0) };
+}
+</script>
+<script type="text/plain" data-mod="./learn.js">// 배우는 순간: 이번 판에 보여 준 카드 기록, 자막·정리 카드 고르기, 퀴즈 문제 고르기, 정책 도감(브라우저에 저장).
+import { CARDS, BY_ID } from "./facts.js";
+
+const DEX_KEY = "narmi-dex-v1";
+function loadDex() { try { return new Set(JSON.parse(localStorage.getItem(DEX_KEY) || "[]")); } catch { return new Set(); } }
+function saveDex(s) { try { localStorage.setItem(DEX_KEY, JSON.stringify([...s])); } catch {} }
+
+export function createLearn() {
+  const dex = loadDex();
+  let shown = new Map();   // 이번 판: id → 보여 준 횟수
+  let order = [];          // 이번 판: 처음 본 순서
+  let fresh = [];          // 이번 판에 도감에 새로 들어간 카드
+  const cursor = {};       // 주제별 다음 자막 위치
+  let summarized = new Set();
+
+  function see(id) {
+    if (!shown.has(id)) { order.push(id); if (!dex.has(id)) { dex.add(id); fresh.push(id); saveDex(dex); } }
+    shown.set(id, (shown.get(id) || 0) + 1);
+    return BY_ID[id];
+  }
+
+  return {
+    reset() { shown = new Map(); order = []; fresh = []; summarized = new Set(); for (const k in cursor) delete cursor[k]; },
+    see,
+    // 주제의 다음 카드(한 판에서 같은 주제 카드를 돌아가며 보여 준다)
+    line(topic) {
+      const list = CARDS.filter(c => c.topic === topic);
+      const i = (cursor[topic] = ((cursor[topic] ?? -1) + 1) % list.length);
+      return see(list[i].id);
+    },
+    // 구간 사이 정리: 이번 판에 가장 많이 본 카드 중 아직 정리 안 한 것
+    summary() {
+      // 많이 본 순, 같으면 최근에 처음 본 순 (출발 브리핑 카드가 계속 뽑히지 않게)
+      const c = [...shown.entries()].filter(([id]) => !summarized.has(id))
+        .sort((a, b) => b[1] - a[1] || order.indexOf(b[0]) - order.indexOf(a[0]))[0];
+      if (!c) return null;
+      summarized.add(c[0]);
+      return see(c[0]);
+    },
+    // 퀴즈: 이번 판에 본 카드에서만. 부딪힌 장애물 주제가 있으면 그 주제를 먼저.
+    quiz(topic) {
+      const seen = order.map(id => BY_ID[id]);
+      const pool = seen.filter(c => c.topic === topic);
+      const from = pool.length ? pool : seen;
+      if (!from.length) return null;
+      // 여러 번 본 카드일수록 먼저
+      from.sort((a, b) => (shown.get(b.id) || 0) - (shown.get(a.id) || 0));
+      const card = from[Math.floor(Math.random() * Math.min(2, from.length))];
+      const opts = [card.q.answer, ...card.q.wrong].sort(() => Math.random() - 0.5);
+      return { card, ask: card.q.ask, opts, answer: opts.indexOf(card.q.answer) };
+    },
+    get seenCards() { return order.map(id => BY_ID[id]); },
+    get freshIds() { return fresh.slice(); },
+    dexHas: id => dex.has(id),
+    get dexCount() { return dex.size; },
+  };
 }
 </script>
 <script type="text/plain" data-mod="./level.js">// 90초 코스 대본. 몇 초에 어느 x에 무엇이 나오는지 미리 정한다(시드 고정, 매판 같은 코스).
@@ -417,12 +573,15 @@ function clampSlot(i) { return Math.max(0, Math.min(4, i)); }
 function shuffle(a, rnd) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } }
 </script>
 <script type="text/plain" data-mod="./main.js">// 시작점. ?view=… 이면 캐릭터 확인 화면, 아니면 게임.
-// 시험용 주소 옵션: ?phase=0~2 (시간대 고정), ?auto=1 (자동 플레이), ?manual=1 (프레임을 직접 진행: window.__game.step)
+// 시험용 주소 옵션: ?phase=0~2 (시간대 고정), ?auto=1 (자동 플레이, 퀴즈는 정답), ?manual=1 (프레임을 직접 진행: window.__game.step)
 import * as THREE from "three";
 import { createWorld } from "./world.js";
 import { createPlayer } from "./player.js";
 import { createInput } from "./input.js";
 import { createUI } from "./ui.js";
+import { createLearn } from "./learn.js";
+import { CARDS, TOPIC_OF } from "./facts.js";
+import { createDali, animateDali } from "./characters.js";
 import { buildCourse, SECTIONS, TOTAL, speedAt, phaseAt, sectionAt, SLOTS } from "./level.js";
 import { createObjects, dropBox, ORG_NAMES } from "./objects.js";
 
@@ -435,6 +594,8 @@ if (q.has("view")) {
 
 const VALUE = { box: 10, sme: 10, innov: 20 }; // 배달할 때 상자 한 개 점수
 const RING_BONUS = 20, SME_BONUS = 30;
+const CAPTION_GAP = 3.2;                       // 상식 자막 사이 최소 간격(초)
+const LABEL = { box: "조달 상자", innov: "혁신제품 상자", sme: "중소기업 상자", cloud: "담합 먹구름을 피했어요", plane: "위조 서류를 피했어요" };
 
 function startGame() {
   const canvas = document.getElementById("gl");
@@ -447,24 +608,41 @@ function startGame() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 600);
+  scene.add(camera);
   const world = createWorld(scene, renderer);
   const player = createPlayer(scene);
   const ui = createUI();
+  const learn = createLearn();
   const course = buildCourse();
-  const rings = course.filter(i => i.type === "ring").length;
+  const rings = course.filter(i => i.type === "ring");
   const auto = q.has("auto");
 
-  // state: ready(시작 화면) · play · crash · result
-  const game = { state: "ready", t: 0, slow: 1, score: 0, cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1, done: new Set(), endT: 0 };
+  // 달이: 브리핑·퀴즈 때 카메라 앞 위쪽에 나타난다
+  const dali = createDali();
+  dali.root.visible = false;
+  camera.add(dali.root);
+  const daliLight = new THREE.PointLight(0xffffff, 6, 8); daliLight.position.set(0, 1, 1); camera.add(daliLight);
+
+  // state: title · brief · play · crash · quiz · result
+  const game = { state: "title", t: 0, slow: 1, score: 0, cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1,
+    done: new Set(), endT: 0, revived: false, capT: 0, breakShown: new Set(), lastHit: null };
   const drops = [];
   const objects = createObjects(scene, course, onEvent);
   const input = createInput(r => game.state === "play" && player.drag(r));
 
+  function caption(type, extra = "") {
+    const card = learn.line(TOPIC_OF[type]);
+    ui.toast(`<b>${extra || LABEL[type]}</b><br>${card.line}`, 2.8, true);
+    game.capT = CAPTION_GAP;
+  }
+
   function onEvent(kind, it) {
     if (kind === "pick") {
       game.cargo.push(it.type); game.boxes++;
-      if (it.type === "sme" && ++game.sme % 3 === 0) { game.score += SME_BONUS; ui.toast(`중소기업 상자 3개 모음 +${SME_BONUS}`); }
-      else ui.toast(it.type === "innov" ? "혁신제품 상자! 배달하면 2배" : it.type === "sme" ? "중소기업 상자" : "조달 상자 +1", 1.0);
+      if (it.type === "sme" && ++game.sme % 3 === 0) { game.score += SME_BONUS; caption("sme", `중소기업 상자 3개 +${SME_BONUS}`); }
+      else if (game.capT <= 0) caption(it.type);
+    } else if (kind === "pass") {
+      if (game.capT <= 0) caption(it.type);
     } else if (kind === "ring") {
       game.done.add(it);
       if (!game.cargo.length) { ui.toast(`${ORG_NAMES[it.org]}: 상자가 없어요`); return; }
@@ -472,34 +650,81 @@ function startGame() {
       game.score += pts; game.delivered++;
       game.innov += game.cargo.filter(c => c === "innov").length;
       drops.push(dropBox(scene, player.x, game.cargo.includes("innov") ? "innov" : "box"));
-      ui.toast(`${ORG_NAMES[it.org]} 배달 완료 +${pts}`, 1.8);
+      caption("ring", `${ORG_NAMES[it.org]} 배달 완료 +${pts} · "잘 받았어요!"`);
       game.cargo = [];
     } else if (kind === "miss") {
       game.done.add(it);
       ui.toast(`${ORG_NAMES[it.org]}을(를) 지나쳤어요`);
     } else if (kind === "hit") {
-      game.state = "crash"; game.endT = 0;
+      game.state = "crash"; game.endT = 0; game.lastHit = it;
       player.crash(); ui.flash();
-      ui.toast(it.type === "cloud" ? "담합 먹구름에 부딪혔어요" : "위조 서류에 부딪혔어요", 2);
+      ui.toast(it.type === "cloud" ? "담합 먹구름에 부딪혔어요" : "위조 서류에 부딪혔어요", 1.4);
     }
     ui.setScore(game.score); ui.setCargo(game.cargo);
   }
 
-  function begin() {
-    objects.reset(); player.reset();
-    Object.assign(game, { state: "play", t: 0, slow: 1, score: 0, cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1, done: new Set(), endT: 0 });
-    ui.setScore(0); ui.setCargo([]); ui.hud(true);
+  function reset() {
+    objects.reset(); player.reset(); learn.reset(); ui.clear();
+    Object.assign(game, { t: 0, slow: 1, score: 0, cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1,
+      done: new Set(), endT: 0, revived: false, capT: 0, breakShown: new Set(), lastHit: null });
+    ui.setScore(0); ui.setCargo([]);
+  }
+
+  function showTitle() {
+    game.state = "title"; ui.hud(false);
+    ui.start(learn.dexCount, briefing, () => ui.dex(learn.dexHas, showTitle));
+  }
+
+  // 오늘의 주문(배송지 목록)과 오늘의 조달 상식 한 장
+  function briefing() {
+    reset();
+    game.state = "brief"; daliShow(true);
+    const count = {};
+    rings.forEach(r => count[ORG_NAMES[r.org]] = (count[ORG_NAMES[r.org]] || 0) + 1);
+    const orders = Object.entries(count).map(([n, c]) => `${n} ${c}곳`);
+    const pool = CARDS.filter(c => c.topic === "pps" || c.id === "innov-pilot");
+    const card = learn.see((pool.find(c => !learn.dexHas(c.id)) || pool[Math.floor(Math.random() * pool.length)]).id);
+    if (auto) { fly(); return; }
+    ui.briefing(orders, card, fly);
+  }
+
+  function fly() {
+    daliShow(false); ui.clear();
+    game.state = "play"; ui.hud(true);
+  }
+
+  function crashed() {
+    const qz = !game.revived && learn.quiz(game.lastHit ? TOPIC_OF[game.lastHit.type] : null);
+    if (!qz) { finish(false); return; }
+    game.state = "quiz"; daliShow(true); ui.hud(false);
+    ui.quiz(qz, ok => {
+      daliShow(false);
+      if (!ok) { finish(false); return; }
+      game.revived = true; game.state = "play"; ui.hud(true);
+      player.revive(3); ui.toast("다시 날아요! 3초 동안 무적", 1.6);
+    });
+    if (auto) setTimeout(() => ui._pick(qz.answer), 600);
   }
 
   function finish(cleared) {
-    game.state = "result"; ui.hud(false);
-    const r = game.delivered;
-    const grade = cleared && r === rings && game.innov >= 2 ? "S" : r >= rings - 1 ? "A" : r >= rings / 2 ? "B" : "C";
-    ui.result({ title: cleared ? "오늘의 배송 끝!" : "배송 중에 쓰러졌어요", grade, score: game.score, delivered: r, rings, innov: game.innov, boxes: game.boxes }, begin);
+    game.state = "result"; ui.hud(false); daliShow(false);
+    const r = game.delivered, n = rings.length;
+    const grade = cleared && r === n && game.innov >= 2 ? "S" : r >= n - 1 ? "A" : r >= n / 2 ? "B" : "C";
+    const res = { title: cleared ? "오늘의 배송 끝!" : "배송 중에 쓰러졌어요", grade, score: game.score, delivered: r, rings: n, innov: game.innov, boxes: game.boxes,
+      seen: learn.seenCards, fresh: learn.freshIds, dexCount: learn.dexCount };
+    const show = () => ui.result(res, briefing, () => ui.dex(learn.dexHas, show));
+    show();
+  }
+
+  function daliShow(on) {
+    dali.root.visible = on;
+    const portrait = innerWidth < innerHeight;
+    dali.root.position.set(portrait ? 0 : -1.5, portrait ? 0.15 : -0.35, -3.2);
+    dali.root.scale.setScalar(portrait ? 0.42 : 0.5);
   }
 
   function orgsLeft(si) {
-    return course.filter(i => i.type === "ring" && sectionAt(i.t) === si && !game.done.has(i)).map(i => ORG_NAMES[i.org]).join(" · ") || "배달 끝";
+    return rings.filter(i => sectionAt(i.t) === si && !game.done.has(i)).map(i => ORG_NAMES[i.org]).join(" · ") || "배달 끝";
   }
 
   // 자동 플레이: 앞으로 1.6초 안에 오는 물건을 보고 가장 좋은 줄로 간다
@@ -536,17 +761,22 @@ function startGame() {
     // 세로 화면에서는 시야를 넓혀 이동 범위가 다 보이게
     camera.fov = w / h < 1 ? 72 : 58;
     camera.updateProjectionMatrix();
+    if (dali.root.visible) daliShow(true);
   }
   addEventListener("resize", resize);
   resize();
 
   function step(dt) {
     let speed = SECTIONS[0].speed;
-    if (game.state === "play" || game.state === "crash") {
-      // 쓰러지면 세상이 느려지다 멈춘다 (물건과 도시가 같은 시계로 움직이게 game.t도 함께 늦춘다)
-      if (game.state === "crash") { game.slow = Math.max(0, game.slow - dt * 2.5); game.endT += dt; }
+    const st = game.state;
+    if (st === "play" || st === "crash" || st === "quiz") {
+      // 쓰러지면 세상이 느려지다 멈춘다. 되살아나면 다시 빨라진다. (물건과 도시가 같은 시계로 움직이게 game.t도 함께)
+      if (st === "play") game.slow = Math.min(1, game.slow + dt * 1.5);
+      else game.slow = Math.max(0, game.slow - dt * 2.5);
+      if (st === "crash" && (game.endT += dt) > 1.0) crashed();
       const gdt = dt * game.slow;
       game.t += gdt;
+      game.capT -= gdt;
       speed = speedAt(game.t) * game.slow;
       const si = sectionAt(game.t);
       if (game.state === "play") {
@@ -555,19 +785,25 @@ function startGame() {
           game.section = si;
           ui.banner(SECTIONS[si].name, si === 0 ? `${orgsLeft(0)}에 배달해요` : si === 1 ? "먹구름이 많아져요" : "속도가 빨라져요");
         }
+        // 구간 사이 쉬는 시간: 달이가 방금 본 상식 하나를 정리
+        for (let i = 0; i < SECTIONS.length - 1; i++) {
+          if (game.t >= SECTIONS[i].end && !game.breakShown.has(i)) {
+            game.breakShown.add(i);
+            const card = learn.summary();
+            if (card) ui.note(card, 3.0);
+          }
+        }
         ui.setSection(SECTIONS[si].name, orgsLeft(si));
         ui.setProgress(game.t / TOTAL);
       }
       objects.update(game.t, gdt, player.x, () => game.state === "play" && player.st.inv <= 0);
       world.setTime(q.has("phase") ? +q.get("phase") : phaseAt(game.t));
       if (game.state === "play" && game.t >= TOTAL) finish(true);
-      else if (game.state === "crash" && game.endT > 1.6) finish(false);
-    } else {
-      if (game.state === "result") speed = 8;
-    }
+    } else if (st === "result") speed = 8;
     for (let i = drops.length - 1; i >= 0; i--) if (!drops[i](dt, speed)) drops.splice(i, 1);
     world.update(dt, speed, player.x);
     player.update(dt, game.state === "play" ? input.axis() : 0);
+    if (dali.root.visible) animateDali(dali, performance.now() / 1000, { wave: game.state === "brief" });
     updateCamera(dt);
     ui.update(dt);
     renderer.render(scene, camera);
@@ -575,8 +811,8 @@ function startGame() {
 
   world.setTime(q.has("phase") ? +q.get("phase") : 0);
   document.getElementById("boot").style.display = "none";
-  window.__game = { game, player, world, step, scene, camera, course, begin };
-  if (auto || q.has("manual")) begin(); else ui.start(begin);
+  window.__game = { game, player, world, step, scene, camera, course, learn, ui, briefing, fly };
+  if (auto) briefing(); else showTitle();
   if (!q.has("manual")) {
     let last = performance.now();
     renderer.setAnimationLoop(now => { const dt = Math.min((now - last) / 1000, 1 / 20); last = now; step(dt); });
@@ -731,7 +967,7 @@ function makeBuilding(org) {
 }
 
 // ── 실행 ─────────────────────────────────────────────
-// onEvent(kind, item): "pick"(상자), "hit"(장애물), "ring"(링 통과), "miss"(링을 놓침)
+// onEvent(kind, item): "pick"(상자), "hit"(장애물), "pass"(장애물을 피함), "ring"(링 통과), "miss"(링을 놓침)
 export function createObjects(scene, course, onEvent) {
   let next = 0;
   const live = [];
@@ -783,8 +1019,10 @@ export function createObjects(scene, course, onEvent) {
         o.done = true;
         const dx = Math.abs(m.position.x - px);
         if (it.type === "ring") onEvent(dx < 1.6 ? "ring" : "miss", it);
-        else if (it.type === "cloud") { if (canHit() && dx < 1.25) onEvent("hit", it); }
-        else if (it.type === "plane") { if (canHit() && dx < 1.05) onEvent("hit", it); }
+        else if (it.type === "cloud" || it.type === "plane") {
+          if (canHit() && dx < (it.type === "cloud" ? 1.25 : 1.05)) onEvent("hit", it);
+          else onEvent("pass", it); // 피함: 자막 기회
+        }
         else if (dx < 1.3) { onEvent("pick", it); scene.remove(m); live.splice(i, 1); continue; }
       }
       if (z > 12) { scene.remove(m); live.splice(i, 1); }
@@ -926,11 +1164,13 @@ renderer.setAnimationLoop(() => {
 });
 window.__ready = true;
 </script>
-<script type="text/plain" data-mod="./ui.js">// 화면 글자: 점수판, 한 줄 알림, 구간 안내, 시작·결과 화면. 3D 위에 HTML로 겹쳐 그린다.
+<script type="text/plain" data-mod="./ui.js">// 화면 글자: 점수판, 한 줄 자막, 구간 안내, 시작·브리핑·퀴즈·결과·도감 화면. 3D 위에 HTML로 겹쳐 그린다.
+import { CARDS, TOPIC_NAME } from "./facts.js";
+
 const CSS = `
 #ui [hidden] { display:none !important; }
 #ui, #ui * { box-sizing:border-box; }
-#ui { --ink:#1d2a33; --sub:#5b6b78; --tan:#ff8a1f; --card:rgba(255,255,255,.94); font-size:16px; }
+#ui { --ink:#1d2a33; --sub:#5b6b78; --tan:#ff8a1f; --tan-soft:#fff1e3; --ok:#1f9d61; --bad:#d8342c; --card:rgba(255,255,255,.95); font-size:16px; color:var(--ink); }
 #ui .hud { position:absolute; left:0; right:0; top:0; display:flex; justify-content:space-between; align-items:flex-start; gap:8px;
   padding:calc(env(safe-area-inset-top,0px) + 12px) max(14px, env(safe-area-inset-right,0px)) 0 max(14px, env(safe-area-inset-left,0px)); }
 #ui .pill { background:var(--card); border-radius:999px; padding:7px 14px; font-weight:800; box-shadow:0 2px 10px rgba(20,50,80,.12); display:flex; align-items:center; gap:8px; white-space:nowrap; }
@@ -942,27 +1182,60 @@ const CSS = `
 #ui .right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
 #ui .bar { width:120px; height:6px; border-radius:3px; background:rgba(255,255,255,.6); overflow:hidden; }
 #ui .bar b { display:block; height:100%; width:0; background:var(--tan); }
-#ui .toast { position:absolute; left:50%; top:calc(env(safe-area-inset-top,0px) + 70px); transform:translate(-50%,0); background:var(--card); padding:8px 16px; border-radius:12px;
-  font-weight:700; box-shadow:0 4px 16px rgba(20,50,80,.15); opacity:0; transition:opacity .2s, transform .2s; max-width:min(88vw,520px); text-align:center; }
+#ui .toast { position:absolute; left:50%; top:calc(env(safe-area-inset-top,0px) + 66px); transform:translate(-50%,0); background:var(--card); padding:9px 16px; border-radius:14px;
+  font-weight:700; line-height:1.4; box-shadow:0 4px 16px rgba(20,50,80,.15); opacity:0; transition:opacity .2s, transform .2s; width:max-content; max-width:min(90vw,560px); text-align:center; }
+#ui .toast b { color:var(--tan); }
 #ui .toast.show { opacity:1; transform:translate(-50%,6px); }
-#ui .banner { position:absolute; left:0; right:0; top:34%; text-align:center; font-size:clamp(28px,7vw,52px); font-weight:900; color:#fff;
+#ui .toast.fact { border:2px solid var(--tan); }
+#ui .banner { position:absolute; left:0; right:0; top:30%; text-align:center; font-size:clamp(28px,7vw,52px); font-weight:900; color:#fff;
   text-shadow:0 3px 0 rgba(0,0,0,.12), 0 6px 24px rgba(30,60,90,.35); opacity:0; transition:opacity .35s; }
 #ui .banner small { display:block; font-size:clamp(14px,3.6vw,20px); font-weight:700; margin-top:6px; }
 #ui .banner.show { opacity:1; }
 #ui .flash { position:absolute; inset:0; background:radial-gradient(ellipse at center, rgba(255,80,60,0) 40%, rgba(255,60,40,.45)); opacity:0; transition:opacity .4s; }
 #ui .flash.show { opacity:1; transition:none; }
-#ui .screen { position:absolute; inset:0; display:grid; place-items:center; padding:20px; background:rgba(16,40,64,.28); }
-#ui .card { background:#fff; border-radius:22px; padding:26px 24px 22px; width:min(92vw,380px); box-shadow:0 12px 40px rgba(10,30,50,.3); text-align:center; color:var(--ink); }
+#ui .note { position:absolute; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 18px); transform:translate(-50%,10px); width:min(92vw,440px); background:#fff; border-radius:18px;
+  padding:14px 18px 16px; box-shadow:0 8px 28px rgba(10,30,50,.25); opacity:0; transition:opacity .3s, transform .3s; }
+#ui .note.show { opacity:1; transform:translate(-50%,0); }
+#ui .who { display:inline-block; background:var(--tan); color:#fff; font-weight:800; font-size:12px; border-radius:999px; padding:3px 10px; margin-bottom:6px; }
+#ui .note h3, #ui .card h3 { margin:2px 0 4px; font-size:17px; }
+#ui .note p, #ui .card p { margin:0; line-height:1.55; color:#33434f; font-size:15px; }
+#ui .screen { position:absolute; inset:0; display:grid; place-items:center; padding:20px; background:rgba(16,40,64,.28); overflow:auto; }
+#ui .screen.low { place-items:end center; background:linear-gradient(rgba(16,40,64,0) 30%, rgba(16,40,64,.35)); padding-bottom:calc(env(safe-area-inset-bottom,0px) + 18px); }
+#ui .card { background:#fff; border-radius:22px; padding:24px 22px 20px; width:min(92vw,400px); box-shadow:0 12px 40px rgba(10,30,50,.3); text-align:center; }
+#ui .card.left { text-align:left; }
 #ui .card h1 { margin:0 0 6px; font-size:26px; letter-spacing:-.5px; }
 #ui .card h2 { margin:0 0 14px; font-size:15px; color:var(--sub); font-weight:600; }
-#ui .stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:14px 0 18px; }
+#ui .stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:14px 0 14px; }
 #ui .stats div { background:#f4f7fa; border-radius:12px; padding:10px 6px; }
 #ui .stats b { display:block; font-size:22px; font-variant-numeric:tabular-nums; }
 #ui .stats span { font-size:12px; color:var(--sub); }
 #ui .grade { font-size:64px; font-weight:900; color:var(--tan); line-height:1; margin:6px 0 2px; }
 #ui button { font:inherit; font-weight:800; font-size:17px; border:0; border-radius:14px; padding:13px 0; width:100%; background:var(--tan); color:#fff; cursor:pointer; }
+#ui button.sub { background:#eef2f5; color:var(--ink); margin-top:8px; font-size:15px; padding:11px 0; }
 #ui .hint { font-size:13px; color:var(--sub); margin-top:12px; line-height:1.5; }
+#ui .orders { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 14px; }
+#ui .orders span { background:var(--tan-soft); color:#a14d00; font-weight:800; border-radius:10px; padding:6px 10px; font-size:14px; }
+#ui .factbox { background:#f6f8fa; border-radius:14px; padding:12px 14px; margin-bottom:16px; }
+#ui .factbox small { color:var(--tan); font-weight:800; font-size:12px; }
+#ui .opts { display:grid; gap:8px; margin:14px 0 4px; }
+#ui .opts button { background:#f1f4f7; color:var(--ink); font-weight:700; font-size:15px; text-align:left; padding:12px 14px; line-height:1.35; border:2px solid transparent; }
+#ui .opts button.ok { background:#e5f6ed; border-color:var(--ok); }
+#ui .opts button.bad { background:#fdeaea; border-color:var(--bad); }
+#ui .timer { height:6px; border-radius:3px; background:#eef2f5; overflow:hidden; margin-top:10px; }
+#ui .timer b { display:block; height:100%; background:var(--tan); width:100%; }
+#ui .verdict { font-weight:900; font-size:18px; margin:10px 0 6px; }
+#ui .verdict.ok { color:var(--ok); } #ui .verdict.bad { color:var(--bad); }
+#ui .chips { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin:0 0 14px; }
+#ui .chips span { background:#f1f4f7; border-radius:999px; padding:5px 10px; font-size:13px; font-weight:700; }
+#ui .chips span.new { background:var(--tan-soft); color:#a14d00; }
+#ui .dex { display:grid; gap:8px; max-height:58vh; overflow:auto; margin:10px 0 14px; text-align:left; }
+#ui .dex div { background:#f6f8fa; border-radius:12px; padding:10px 12px; }
+#ui .dex div.lock { color:#9aa6b0; }
+#ui .dex small { color:var(--tan); font-weight:800; font-size:11px; }
+#ui .dex p { font-size:14px; }
 `;
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 export function createUI() {
   const root = document.getElementById("ui");
@@ -972,48 +1245,106 @@ export function createUI() {
       <div class="pill"><span class="score">0</span><small>점</small><span class="cargo"></span></div>
       <div class="right"><div class="pill"><small class="sec">아침</small><span class="org"></span></div><div class="bar"><b></b></div></div>
     </div>
-    <div class="toast"></div><div class="banner"></div><div class="flash"></div><div class="layer"></div>`;
+    <div class="toast"></div><div class="banner"></div><div class="flash"></div><div class="note"></div><div class="layer"></div>`;
   const $ = s => root.querySelector(s);
-  const hud = $(".hud"), toast = $(".toast"), banner = $(".banner"), flash = $(".flash"), layer = $(".layer");
-  let toastT = 0, bannerT = 0;
+  const hud = $(".hud"), toast = $(".toast"), banner = $(".banner"), flash = $(".flash"), note = $(".note"), layer = $(".layer");
+  let toastT = 0, bannerT = 0, noteT = 0, quizT = null;
 
-  return {
+  function screen(html, cls = "") {
+    layer.innerHTML = `<div class="screen on ${cls}"><div class="card">${html}</div></div>`;
+    return layer.querySelector(".card");
+  }
+  const on = (el, sel, fn) => { const b = el.querySelector(sel); if (b) b.onclick = e => { e.stopPropagation(); fn(); }; };
+
+  const ui = {
     hud(show) { hud.hidden = !show; },
     setScore(n) { $(".score").textContent = n; },
     setCargo(list) { $(".cargo").innerHTML = list.map(t => `<i class="c-${t}"></i>`).join(""); },
     setSection(name, orgsLeft) { $(".sec").textContent = name; $(".org").textContent = orgsLeft; },
     setProgress(k) { $(".bar b").style.width = (Math.max(0, Math.min(1, k)) * 100).toFixed(1) + "%"; },
-    toast(text, secs = 1.6) { toast.textContent = text; toast.classList.add("show"); toastT = secs; },
-    banner(title, sub = "", secs = 2.2) { banner.innerHTML = title + (sub ? `<small>${sub}</small>` : ""); banner.classList.add("show"); bannerT = secs; },
+    // 한 줄 자막. fact=true면 상식 자막(테두리)
+    toast(html, secs = 1.6, fact = false) { toast.innerHTML = html; toast.classList.toggle("fact", fact); toast.classList.add("show"); toastT = secs; },
+    banner(title, sub = "", secs = 2.2) { banner.innerHTML = esc(title) + (sub ? `<small>${esc(sub)}</small>` : ""); banner.classList.add("show"); bannerT = secs; },
     flash() { flash.classList.add("show"); requestAnimationFrame(() => requestAnimationFrame(() => flash.classList.remove("show"))); },
+    // 구간 사이 달이의 정리 (화면 아래 카드, 저절로 사라짐)
+    note(card, secs = 2.9) {
+      note.innerHTML = `<span class="who">달이의 정리 · ${esc(TOPIC_NAME[card.topic])}</span><h3>${esc(card.title)}</h3><p>${esc(card.more)}</p>`;
+      note.classList.add("show"); noteT = secs;
+    },
     update(dt) {
       if (toastT > 0 && (toastT -= dt) <= 0) toast.classList.remove("show");
       if (bannerT > 0 && (bannerT -= dt) <= 0) banner.classList.remove("show");
+      if (noteT > 0 && (noteT -= dt) <= 0) note.classList.remove("show");
+      if (quizT) quizT(dt);
     },
-    start(onGo) {
-      layer.innerHTML = `<div class="screen on"><div class="card">
-        <h1>나르미의 하늘 배송</h1><h2>공공기관에 조달 상자를 배달해요</h2>
-        <button class="go">출발!</button>
-        <div class="hint">폰: 화면을 좌우로 끌기 · PC: ←/→ 키<br>상자를 모아 주황 링을 지나면 배달 완료<br>먹구름과 종이비행기는 피하세요</div>
-      </div></div>`;
-      layer.querySelector(".go").onclick = e => { e.stopPropagation(); layer.innerHTML = ""; onGo(); };
+    start(dexCount, onGo, onDex) {
+      const c = screen(`<h1>나르미의 하늘 배송</h1><h2>공공기관에 조달 상자를 배달해요</h2>
+        <button class="go">시작하기</button><button class="sub dexb">정책 도감 ${dexCount}/${CARDS.length}</button>
+        <div class="hint">폰: 화면을 좌우로 끌기 · PC: ←/→ 키<br>상자를 모아 주황 링을 지나면 배달 완료<br>먹구름과 종이비행기는 피하세요</div>`);
+      on(c, ".go", () => { layer.innerHTML = ""; onGo(); });
+      on(c, ".dexb", onDex);
     },
-    result(r, onAgain) {
-      layer.innerHTML = `<div class="screen on"><div class="card">
-        <h2>${r.title}</h2><div class="grade">${r.grade}</div>
+    // 출발 전 브리핑: 오늘의 주문 + 오늘의 조달 상식
+    briefing(orders, card, onGo) {
+      const c = screen(`<div class="card left" style="box-shadow:none;padding:0;width:auto"><span class="who">달이</span>
+        <h3>오늘의 주문이에요!</h3><div class="orders">${orders.map(o => `<span>${esc(o)}</span>`).join("")}</div>
+        <div class="factbox"><small>오늘의 조달 상식</small><h3>${esc(card.title)}</h3><p>${esc(card.more)}</p></div>
+        <button class="go">출발!</button></div>`, "low");
+      on(c, ".go", () => { layer.innerHTML = ""; onGo(); });
+    },
+    // 부활 퀴즈: 10초. done(맞혔는지)
+    quiz(qz, done) {
+      const c = screen(`<div class="card left" style="box-shadow:none;padding:0;width:auto"><span class="who">달이</span>
+        <p>아까 본 내용이에요! 맞히면 다시 날 수 있어요.</p>
+        <h3 style="margin-top:10px">${esc(qz.ask)}</h3>
+        <div class="opts">${qz.opts.map((o, i) => `<button data-i="${i}">${i + 1}. ${esc(o)}</button>`).join("")}</div>
+        <div class="timer"><b></b></div><div class="after"></div></div>`, "low");
+      const bar = c.querySelector(".timer b"), btns = [...c.querySelectorAll(".opts button")];
+      let left = 10, answered = false;
+      const pick = i => {
+        if (answered) return; answered = true; quizT = null;
+        const ok = i === qz.answer;
+        btns.forEach((b, k) => { b.disabled = true; if (k === qz.answer) b.classList.add("ok"); else if (k === i) b.classList.add("bad"); });
+        const after = c.querySelector(".after");
+        if (ok) {
+          after.innerHTML = `<div class="verdict ok">정답! 다시 날아요</div>`;
+          let w = 1.1; quizT = dt => { if ((w -= dt) <= 0) { quizT = null; layer.innerHTML = ""; done(true); } };
+        } else {
+          after.innerHTML = `<div class="verdict bad">${i < 0 ? "시간이 다 됐어요" : "아쉬워요"}</div><p>${esc(qz.card.more)}</p><button class="go" style="margin-top:12px">결과 보기</button>`;
+          on(after, ".go", () => { layer.innerHTML = ""; done(false); });
+        }
+      };
+      btns.forEach(b => b.onclick = e => { e.stopPropagation(); pick(+b.dataset.i); });
+      quizT = dt => { left -= dt; bar.style.width = Math.max(0, left / 10 * 100) + "%"; if (left <= 0) pick(-1); };
+      ui._pick = pick; // 시험용
+    },
+    result(r, onAgain, onDex) {
+      const c = screen(`<h2>${esc(r.title)}</h2><div class="grade">${r.grade}</div>
         <div class="stats">
           <div><b>${r.score}</b><span>점수</span></div>
           <div><b>${r.delivered}/${r.rings}</b><span>배달한 기관</span></div>
           <div><b>${r.innov}</b><span>혁신제품 배달</span></div>
           <div><b>${r.boxes}</b><span>모은 상자</span></div>
         </div>
-        <button class="again">다시 하기</button>
-      </div></div>`;
-      layer.querySelector(".again").onclick = e => { e.stopPropagation(); layer.innerHTML = ""; onAgain(); };
+        ${r.seen.length ? `<h2 style="margin-bottom:8px">이번 판에 본 조달 상식 ${r.seen.length}장${r.fresh.length ? ` · 도감에 새로 ${r.fresh.length}장` : ""}</h2>
+        <div class="chips">${r.seen.map(c => `<span class="${r.fresh.includes(c.id) ? "new" : ""}">${esc(c.title)}</span>`).join("")}</div>` : ""}
+        <button class="again">다시 하기</button><button class="sub dexb">정책 도감 ${r.dexCount}/${CARDS.length}</button>`);
+      on(c, ".again", () => { layer.innerHTML = ""; onAgain(); });
+      on(c, ".dexb", onDex);
     },
-    clear() { layer.innerHTML = ""; },
+    // 정책 도감: 본 카드는 내용, 아직 못 본 카드는 잠김
+    dex(has, onBack) {
+      const c = screen(`<h1 style="font-size:22px">정책 도감</h1><h2>게임 중에 본 조달 상식이 모여요 (${CARDS.filter(x => has(x.id)).length}/${CARDS.length})</h2>
+        <div class="dex">${CARDS.map(x => has(x.id)
+          ? `<div><small>${esc(TOPIC_NAME[x.topic])}</small><h3>${esc(x.title)}</h3><p>${esc(x.more)}</p></div>`
+          : `<div class="lock"><small style="color:#b7c0c8">${esc(TOPIC_NAME[x.topic])}</small><h3>???</h3><p>게임 중에 만나면 열려요</p></div>`).join("")}</div>
+        <button class="back">돌아가기</button>`);
+      on(c, ".back", onBack);
+    },
+    clear() { layer.innerHTML = ""; quizT = null; },
     get busy() { return layer.childElementCount > 0; },
   };
+  return ui;
 }
 </script>
 <script type="text/plain" data-mod="./world.js">// 하늘·구름·도시. 나르미는 z=0 근처에 머물고, 세상이 +z 방향(카메라 쪽)으로 흘러온다.
