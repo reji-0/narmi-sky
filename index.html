@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-20T02:05:02.049Z">
+<meta name="build" content="2026-11-20T02:14:30.268Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -149,8 +149,8 @@ export function createNarmi() {
   });
 
   // 꼬리깃
-  const tail = ellipsoid(1, 0.16, 0.05, 0.2, mat(C.wingTip), 16);
-  tail.position.set(0, 0.36, -0.42); tail.rotation.x = 0.6; body.add(tail);
+  // 꼬리깃: 납작한 깃 3장(부채꼴)
+  [-1, 0, 1].forEach(i => { const f = ellipsoid(1, 0.08, 0.03, 0.24, mat(C.wingTip), 12); f.position.set(i * 0.09, 0.34, -0.5); f.rotation.set(0.5, i * 0.35, 0); body.add(f); });
 
   // 발(크고 통통하게)
   const feet = [-1, 1].map(s => {
@@ -161,6 +161,13 @@ export function createNarmi() {
     return g;
   });
 
+  // 몸 가운데(가슴 높이)를 축으로 숙이고 기울도록, 부품들을 한 단계 안쪽 그룹으로 옮긴다
+  const PIVOT_Y = 1.15, inner = new THREE.Group();
+  inner.position.y = -PIVOT_Y;
+  [...body.children].forEach(c => inner.add(c));
+  body.add(inner);
+  body.position.y = PIVOT_Y;
+  body.userData.baseY = PIVOT_Y;
   root.userData.parts = { body, head, wings, feet, eyes };
   return { root, parts: root.userData.parts };
 }
@@ -240,10 +247,11 @@ export function animateNarmi(n, t, opt = {}) {
   const flap = opt.flap ?? 1, speed = opt.flapSpeed ?? 9;
   const a = Math.sin(t * speed) * 0.75 * flap;
   wings.forEach(w => { w.rotation.z = w.userData.side * (-0.75 + 0.4 * flap + a); w.rotation.y = w.userData.side * 0.15 * flap; });
-  body.position.y = Math.sin(t * speed - 0.6) * 0.05 * flap;
-  body.rotation.z = -(opt.bank ?? 0) * 0.45;
-  body.rotation.x = (opt.pitch ?? 0);
-  feet.forEach(f => f.rotation.x = 0.6 * flap);
+  body.position.y = body.userData.baseY + Math.sin(t * speed - 0.6) * 0.05 * flap;
+  body.rotation.order = "YXZ";
+  body.rotation.x = opt.pitch ?? 0;              // 앞으로 숙이기(비행 자세)
+  body.rotation.z = -(opt.bank ?? 0) * 0.5;      // 좌우 기울기
+  feet.forEach(f => f.rotation.x = opt.tuck ?? 0.6 * flap); // 비행 중엔 발을 뒤로 접는다
 }
 export function animateDali(d, t, opt = {}) {
   const { body, arms, tail } = d.parts;
@@ -308,13 +316,13 @@ function startGame() {
   const game = { speed: 22, time: 0, phase: q.has("phase") ? +q.get("phase") : 0 };
   createInput(dir => player.move(dir));
 
-  // 카메라: 나르미 뒤쪽 조금 위·오른쪽에서 따라간다 (옆얼굴이 살짝 보이게)
-  const camPos = new THREE.Vector3(1.4, 2.6, 7.2), camLook = new THREE.Vector3();
+  // 카메라: 나르미 바로 뒤 조금 위에서 따라간다. 레인을 옮기면 카메라도 같은 쪽으로 따라가 여백이 한쪽으로 쏠리지 않게.
+  const camPos = new THREE.Vector3(0, 3.0, 7.0), camLook = new THREE.Vector3();
   function updateCamera(dt) {
-    const want = new THREE.Vector3(player.x * 0.55 + 1.3, 3.1, 7.0);
+    const want = new THREE.Vector3(player.x * 0.8, 3.0, 7.0);
     camPos.lerp(want, 1 - Math.exp(-dt * 5));
     camera.position.copy(camPos);
-    camLook.set(player.x * 0.75, -0.6, -10);
+    camLook.set(player.x * 0.9, -0.6, -10);
     camera.lookAt(camLook);
   }
 
@@ -380,10 +388,10 @@ export function createPlayer(scene) {
     st.vx += ((target - st.x) * k - st.vx * d) * dt;
     st.x += st.vx * dt;
     st.bank = THREE.MathUtils.lerp(st.bank, THREE.MathUtils.clamp(-st.vx / 14, -1, 1), 1 - Math.exp(-dt * 12));
-    narmi.root.position.set(st.x, Math.sin(st.t * 2.1) * 0.12, 0);
+    narmi.root.position.set(st.x, -0.9 + Math.sin(st.t * 2.1) * 0.12, 0); // 숙이면 몸 중심이 올라가므로 내려 맞춘다
     // 기울 때 고개를 살짝 돌려 옆얼굴이 보이게
     narmi.root.rotation.y = Math.PI + st.bank * 0.35 + st.look;
-    animateNarmi(narmi, st.t, { flap: 1, flapSpeed: 11, bank: st.bank, pitch: 0.18 });
+    animateNarmi(narmi, st.t, { flap: 1.25, flapSpeed: 11, bank: st.bank, pitch: 1.05, tuck: 1.4 });
   }
 
   return { narmi, st, move, update, get x() { return st.x; } };
@@ -534,7 +542,7 @@ export function createWorld(scene, renderer) {
     const side = rand() < 0.5 ? -1 : 1;
     const band = rand();
     if (band < 0.55) c.position.set(side * (15 + rand() * 30), -4 + rand() * 14, z);  // 옆 (레인과 겹치지 않게)
-    else if (band < 0.85) c.position.set((rand() - 0.5) * 50, -9 - rand() * 6, z);  // 아래
+    else if (band < 0.85) { const x = (rand() - 0.5) * 50; c.position.set(x + Math.sign(x || 1) * 10, -10 - rand() * 6, z); } // 아래 (레인 바로 밑은 비움)
     else c.position.set((rand() - 0.5) * 50, 12 + rand() * 8, z);                  // 위
   }
 
