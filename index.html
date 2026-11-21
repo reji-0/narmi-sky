@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-21T15:01:09.621Z">
+<meta name="build" content="2026-11-21T15:20:25.290Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -1782,6 +1782,55 @@ export function createFx(scene) {
   return fx;
 }
 </script>
+<script type="text/plain" data-mod="./gates.js">// 기업 문 상황 6개: 구간마다 두 번. 문 앞에서 멈추고, 달이가 "어디서 무엇을 왜" 필요한지와 문 셋의 물품을 보여 준다.
+// 가격만이 아니라 쓰임새·내구성·안전 인증·중소기업·혁신제품·담합을 따져 고르게 한다.
+// ok = 정답, tag: sme(중소기업 상자로 셈) · innov(방패). 기업 이름은 모두 지어낸 이름.
+// 제도 설명의 출처는 docs/퀴즈_출처.md 번호(src).
+export const SCENES = [
+  { org: "🏫 한빛초등학교", need: "교실 의자 30개", ctx: "1학년 아이들이 6년 동안 매일 앉아요.", topic: "naraj",
+    opts: [
+      { sign: "접이식 플라스틱 의자", desc: "가장 싸요 · 행사 때 잠깐 펴는 의자" },
+      { sign: "학생용 철제 의자", desc: "높이 조절 · 튼튼해요 · 보통 값", ok: true },
+      { sign: "가죽 사무용 의자", desc: "푹신한 회전의자 · 가장 비싸요" },
+    ],
+    why: "매일 오래 쓰니 튼튼하고 아이 키에 맞는 학생용이 알맞아. 너무 싼 건 금방 망가져 다시 사야 하고, 사무용 의자는 비싸고 교실에 맞지 않아." },
+  { org: "🚒 푸른소방서", need: "장갑 50켤레", ctx: "소방관이 불길 속에 들어갈 때 껴요.", topic: "pps",
+    opts: [
+      { sign: "면 목장갑", desc: "가장 싸요 · 불이 붙으면 타요" },
+      { sign: "방화 장갑", desc: "불과 열을 막는 인증 제품 · 비싸요", ok: true },
+      { sign: "실험용 고무장갑", desc: "약품에 강해요 · 열에 녹아요" },
+    ],
+    why: "소방관의 안전이 걸린 물건은 쓰임새에 맞는 인증 제품이어야 해. 싸다고 고르면 사람이 다칠 수 있어." },
+  { org: "🏫 한빛초등학교", need: "과학실 장갑 100켤레", ctx: "실험 시간에 약품을 다뤄요.", topic: "naraj",
+    opts: [
+      { sign: "방화 장갑", desc: "불에 강한 소방용 · 아주 비싸요" },
+      { sign: "실험용 니트릴 장갑", desc: "약품이 스며들지 않아요 · 알맞은 값", ok: true },
+      { sign: "면 목장갑", desc: "가장 싸요 · 약품이 스며들어요" },
+    ],
+    why: "소방서에선 방화 장갑이 정답이었지만 과학실엔 필요 없어. 같은 장갑도 어디서 무엇에 쓰는지에 따라 정답이 달라져." },
+  { org: "🏥 햇살보건소", need: "휠체어 6대", ctx: "성능과 값이 똑같은 제품이 둘 있어요.", topic: "sme", src: [10],
+    opts: [
+      { sign: "대기업 휠체어", desc: "안전 인증 ✓ · 1대 100만원" },
+      { sign: "🌱 중소기업 휠체어", desc: "안전 인증 ✓ · 1대 100만원", ok: true, tag: "sme" },
+      { sign: "해외 직구 휠체어", desc: "인증 없음 · 1대 80만원 · 고치기 어려워요" },
+    ],
+    why: "성능과 값이 같다면 중소기업 제품을 먼저! 공공기관은 구매액의 50% 이상을 중소기업 제품으로 사야 해. 인증 없는 제품은 안전을 믿기 어려워." },
+  { org: "🏥 햇살보건소", need: "체온계 40개", ctx: "줄 서서 재느라 시간이 오래 걸려요.", topic: "innov", src: [8],
+    opts: [
+      { sign: "수은 체온계", desc: "가장 싸요 · 깨지면 수은이 위험해요" },
+      { sign: "💡 비접촉 체온계", desc: "혁신제품 · 닿지 않고 1초 만에 재요", ok: true, tag: "innov" },
+      { sign: "동물용 체온계", desc: "동물병원용 · 값은 비슷해요" },
+    ],
+    why: "새로 나온 혁신제품은 조달청이 첫 구매자가 돼서 공공기관이 먼저 써 보게 해. 보건소의 긴 줄도 줄이고, 좋은 기술을 가진 기업도 클 수 있어." },
+  { org: "🏫 한빛초등학교", need: "노트북 20대", ctx: "세 회사가 값을 써 냈어요. 수상한 점은 없나요?", topic: "fair", src: [13],
+    opts: [
+      { sign: "한통산업", desc: "1대 135만원" },
+      { sign: "한통상사", desc: "1대 135만원" },
+      { sign: "바른컴퓨터", desc: "1대 118만원", ok: true },
+    ],
+    why: "이름이 비슷한 두 곳이 똑같이 비싼 값을 써 냈어. 몰래 짜고 값을 올리는 입찰 담합이야. 법으로 금지돼 있고, 걸리면 최대 2년까지 공공입찰에 못 나와." },
+];
+</script>
 <script type="text/plain" data-mod="./input.js">// 입력: 자유 이동. 폰은 손가락을 끄는 만큼 따라오고, PC는 ←/→, A/D를 누르고 있는 동안 움직인다.
 // onDrag(비율): 화면 너비 대비 이번에 끈 거리. axis(): 키보드 방향(-1, 0, 1).
 export function createInput(onDrag, onTap) {
@@ -1879,7 +1928,9 @@ export function createLearn() {
   };
 }
 </script>
-<script type="text/plain" data-mod="./level.js">// 90초 코스 대본. 몇 초에 어느 x에 무엇이 나오는지 미리 정한다(시드 고정, 매판 같은 코스).
+<script type="text/plain" data-mod="./level.js">import { SCENES } from "./gates.js";
+
+// 90초 코스 대본. 몇 초에 어느 x에 무엇이 나오는지 미리 정한다(시드 고정, 매판 같은 코스).
 // 화면에는 레인이 없지만, 배치는 보이지 않는 5줄(SLOTS)에 맞춰 피할 길이 항상 있게 한다.
 
 export const SLOTS = [-3.6, -1.8, 0, 1.8, 3.6];
@@ -1935,17 +1986,8 @@ export const ORDERS = [
   ["school", "health"],
 ];
 
-// 기업 문: 구간마다 두 번. 문 셋 중 하나를 골라 통과한다(간판 = 적정가보다 몇 %).
-//   good 알맞게 싼 곳 · sme 🌱 중소기업 · innov 💡 혁신제품(방패) → 좋음
-//   dump 너무 싼 곳(부실, 상자가 부서짐) · pricey 비싼 곳 · collude 같은 값 두 곳(담합) → 콤보가 끊김
+// 기업 문: 구간마다 두 번(상황은 gates.js). 문 셋의 위치. 보기 순서는 시드에 따라 섞는다.
 export const GATE_X = [-3, 0, 3];
-const GATE_SETS = [
-  [["good", "dump", "pricey"], ["good", "pricey", "dump"]],
-  [["sme", "dump", "pricey"], ["innov", "dump", "pricey"]],
-  [["collude", "collude", "good"], ["collude", "collude", "sme"]],
-];
-const PCT = { good: [-12, -8], sme: [-6, -3], innov: [4, 7], dump: [-48, -40], pricey: [15, 22], collude: [24, 29] };
-export const GATE_GOOD = { good: true, sme: true, innov: true };
 
 // 코스 만들기. 항목: { t, type, x, ... }
 //   box(일반) · innov(혁신제품) · sme(중소기업) · cloud(담합 먹구름) · plane(위조 서류 종이비행기, x는 도착 위치) · ring(배송 링, org)
@@ -1968,13 +2010,11 @@ export function buildCourse(seed = 20261122) {
 
     while (t < sec.end - 1.2) {
       // 기업 문 차례: 앞뒤를 비워 간판을 읽고 고를 시간을 준다
-      if (gateIdx < 2 && t >= gateTimes[gateIdx] - 1.1) {
-        const kinds = GATE_SETS[si][gateIdx].slice(); shuffle(kinds, rnd);
-        const lo = (a, b) => Math.round(a + rnd() * (b - a));
-        const same = lo(...PCT.collude);
-        const gates = kinds.map((k, n) => ({ x: GATE_X[n], kind: k, pct: k === "collude" ? same : lo(...PCT[k]) }));
-        add(t + 1.1, "gate", 2, { gates, first: gateIdx === 0 });
-        gateIdx++; t += 1.1 + 1.3;
+      if (gateIdx < 2 && t >= gateTimes[gateIdx] - 1.8) {
+        const sc = SCENES[si * 2 + gateIdx], order = [0, 1, 2]; shuffle(order, rnd);
+        const gates = order.map((k, n) => ({ x: GATE_X[n], ...sc.opts[k] }));
+        add(t + 1.8, "gate", 2, { gates, sc });
+        gateIdx++; t += 1.8 + 1.3;
         continue;
       }
       // 배송 링 차례: 같은 줄에 상자 3개를 놓아 링으로 이끈다
@@ -2032,7 +2072,7 @@ import { createUI } from "./ui.js";
 import { createLearn } from "./learn.js";
 import { CARDS, TOPIC_OF } from "./facts.js";
 import { createDali, animateDali } from "./characters.js";
-import { buildCourse, SECTIONS, TOTAL, speedAt, phaseAt, sectionAt, SLOTS, GATE_GOOD } from "./level.js";
+import { buildCourse, SECTIONS, TOTAL, speedAt, phaseAt, sectionAt, SLOTS } from "./level.js";
 import { createObjects, dropBox, ORG_NAMES } from "./objects.js";
 import { createAudio } from "./audio.js";
 import { createFx } from "./fx.js";
@@ -2101,23 +2141,21 @@ function startGame() {
     sme: "초록 상자는 중소기업이 만든 제품이야.", pps: "우리 조달청 이야기 하나 해 줄게." };
 
   // state: title · brief · play · crash · quiz · result
-  const game = { state: "title", t: 0, slow: 1, score: 0, mult: 1, shield: 0, magnet: 0, gatesGood: 0, gateSeen: new Set(), gateAnn: new Set(), cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1,
+  const game = { state: "title", t: 0, slow: 1, score: 0, mult: 1, shield: 0, magnet: 0, gatesGood: 0, asked: new Set(), planeWarn: new Set(), cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1,
     done: new Set(), endT: 0, revived: false, capT: 0, breakShown: new Set(), lastHit: null, bullet: 0, bk: 1, night: 0, rideT: -1, rideOut: -1 };
   const drops = [];
   const objects = createObjects(scene, course, onEvent, { magnet: () => game.magnet > 0 });
   // 방패: 나르미를 감싸는 금빛 거품
   const shieldMesh = new THREE.Mesh(new THREE.SphereGeometry(1.15, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending }));
   shieldMesh.visible = false; scene.add(shieldMesh);
-  // 기업 문 결과: 좋은 문은 점수·콤보, 나쁜 문은 콤보가 끊기고 대가를 치른다. 처음 한 번만 이유를 덧붙인다.
-  const GATE_MSG = {
-    good: ["적정가로 계약!", "여러 기업이 경쟁하면 값이 알맞게 내려가요"],
-    sme: ["🌱 중소기업과 계약!", "공공기관은 구매액의 50% 이상을 중소기업 제품으로 사요"],
-    innov: ["💡 혁신제품 첫 구매! 방패 8초", "조달청은 새 혁신제품의 첫 구매자가 돼요"],
-    dump: ["너무 싸서 부실! 상자가 부서졌어요", "너무 싸면 품질이 떨어져 결국 세금이 두 번 들어요"],
-    pricey: ["비싸게 샀어요 · 세금 낭비", "같은 물건이면 알맞은 값에 사야 세금을 아껴요"],
-    collude: ["담합 업체! 값이 똑같은 두 곳은 반칙", "짜고 값을 올리는 담합은 법으로 금지돼 있어요"],
-  };
-  const GATE_TOPIC = { good: "naraj", sme: "sme", innov: "innov", collude: "fair", dump: "pps", pricey: "naraj" };
+  // 물건을 먹을 때 나르미 둘레가 번쩍(색은 물건 종류)
+  const flashTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.35, "rgba(255,255,255,.5)"); gr.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+  const pickFlash = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
+  scene.add(pickFlash);
+  const FLASH_COLOR = { box: 0xffc070, sme: 0x7be08f, innov: 0xffe066, ok: 0x8ff0b0 };
+  function flashPick(type) { pickFlash.material.color.setHex(FLASH_COLOR[type] || 0xffffff); pickFlash.material.opacity = 1; pickFlash.scale.setScalar(2.2); player.pop(); }
   function addPts(n) { const p = n * game.mult; game.score += p; ui.pop(`+${p}`); return p; }
   function setMult(m) { const up = m > game.mult; game.mult = Math.max(1, Math.min(MULT_MAX, m)); ui.setMult(game.mult, up); }
   const input = createInput(r => game.state === "play" && player.drag(r));
@@ -2131,25 +2169,26 @@ function startGame() {
 
   function onEvent(kind, it, gate) {
     if (kind === "gate") {
-      const good = GATE_GOOD[gate.kind], [msg, why] = GATE_MSG[gate.kind];
-      const first = !game.gateSeen.has(gate.kind); game.gateSeen.add(gate.kind);
-      if (good) {
-        game.gatesGood++; setMult(game.mult + 1); const p = addPts(GATE_PTS);
-        sfx.right(); fx.ring(player.x); cam.punch = 4;
-        if (gate.kind === "sme") { game.cargo.push("sme"); countSme(); }
-        else if (gate.kind === "innov") { game.cargo.push("innov"); game.shield = SHIELD_T; }
+      // 문을 지나면 멈추고, 가운데 카드로 정답·이유를 알려 준다
+      const ok = !!gate.ok, right = it.gates.findIndex(g => g.ok);
+      let pts = 0;
+      if (ok) {
+        game.gatesGood++; setMult(game.mult + 1); pts = addPts(GATE_PTS);
+        sfx.right(); fx.ring(player.x); cam.punch = 4; flashPick("ok");
+        if (gate.tag === "sme") { game.cargo.push("sme"); countSme(true); }
+        else if (gate.tag === "innov") { game.cargo.push("innov"); game.shield = SHIELD_T; }
         else game.cargo.push("box");
-        ui.toast(`<b>${msg} +${p}</b>${first ? `<br><span class="cardget">${why}</span>` : ""}`, first ? 2.6 : 1.6, true);
-      } else {
-        setMult(1); sfx.wrong(); fx.hit(player.x, player.y + 0.9); cam.shake = 0.25; ui.flash();
-        if (gate.kind === "dump" || gate.kind === "collude") game.cargo = [];
-        ui.toast(`<b style="color:var(--bad)">${msg}</b>${first ? `<br><span class="cardget">${why}</span>` : ""}`, first ? 2.8 : 1.8, true);
-      }
-      learn.line(GATE_TOPIC[gate.kind]); game.capT = CAPTION_GAP;
+      } else { setMult(1); sfx.wrong(); cam.shake = 0.25; ui.flash(); }
+      learn.line(it.sc.topic);
+      game.state = "reveal"; daliShow(true);
+      ui.gateReveal({ sc: it.sc, gates: it.gates, picked: it.gates.indexOf(gate), right, pts, shield: ok && gate.tag === "innov" }, () => {
+        daliShow(false); game.state = "play"; game.capT = 1.5; player.setTarget(player.x);
+      });
+      if (auto) setTimeout(() => ui._gateGo?.(), 300);
     } else if (kind === "pick") {
       game.cargo.push(it.type); game.boxes++;
       sfx.pick(it.type); fx.pick(player.x, it.type);
-      addPts(PICK[it.type]);
+      addPts(PICK[it.type]); flashPick(it.type);
       if (it.type === "sme") countSme();
       else if (game.capT <= 0) caption(it.type);
     } else if (kind === "pass") {
@@ -2182,19 +2221,28 @@ function startGame() {
     ui.setScore(game.score); ui.setCargo(game.cargo);
   }
   // 중소기업 상자 3개마다 자석
-  function countSme() {
-    if (++game.sme % 3) { if (game.capT <= 0) caption("sme"); return; }
+  function countSme(quiet) {
+    if (++game.sme % 3) { if (!quiet && game.capT <= 0) caption("sme"); return; }
     game.magnet = MAGNET_T; sfx.ring();
     ui.toast(`<b>🌱 중소기업 상자 3개 · 자석 ${MAGNET_T}초!</b>`, 1.8, true); game.capT = CAPTION_GAP;
   }
 
   function reset() {
     objects.reset(); player.reset(); learn.reset(); ui.clear();
-    Object.assign(game, { t: 0, slow: 1, score: 0, mult: 1, shield: 0, magnet: 0, gatesGood: 0, gateSeen: new Set(), gateAnn: new Set(), cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1,
+    Object.assign(game, { t: 0, slow: 1, score: 0, mult: 1, shield: 0, magnet: 0, gatesGood: 0, asked: new Set(), planeWarn: new Set(), cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1,
       done: new Set(), endT: 0, revived: false, capT: 0, breakShown: new Set(), lastHit: null, bullet: 0, bk: 1, night: 0, rideT: -1, rideOut: -1 });
     ride.visible = false;
     fx.clear();
     ui.setScore(0); ui.setCargo([]); ui.setMult(1); ui.setPower(0, 0);
+  }
+
+  function askGate(g) {
+    game.asked.add(g); game.state = "ask"; daliShow(true); sfx.quiz(); ui.warn(0);
+    ui.gateAsk(g.sc, g.gates, i => {
+      daliShow(false); game.state = "play";
+      player.setTarget(g.gates[i].x); // 고른 문 쪽으로 날아간다(그 뒤에도 직접 움직일 수 있다)
+    });
+    if (auto) setTimeout(() => ui._gatePick?.(g.gates.findIndex(x => x.ok)), 300);
   }
 
   function showTitle() {
@@ -2292,7 +2340,8 @@ function startGame() {
   function daliShow(on) {
     dali.root.visible = on;
     const portrait = innerWidth < innerHeight;
-    dali.root.position.set(portrait ? 0 : -1.5, portrait ? 0.15 : -0.35, -3.2);
+    // 세로: 카드 위쪽, 가로: 가운데 카드의 왼쪽
+    dali.root.position.set(portrait ? 0 : -2.25, portrait ? 0.8 : -0.3, -3.2);
     dali.root.scale.setScalar(portrait ? 0.42 : 0.5);
   }
 
@@ -2310,7 +2359,7 @@ function startGame() {
         const soon = it.t - game.t, w = 1 / (0.3 + soon), dx = Math.abs(it.x - x);
         if ((it.type === "cloud" || it.type === "plane") && dx < 1.6 && soon < 0.9) v -= 100 * w;
         else if (it.type === "ring" && dx < 1.2) v += 8 * w;
-        else if (it.type === "gate") { const g = it.gates.reduce((a, b) => (Math.abs(b.x - x) < Math.abs(a.x - x) ? b : a)); v += (GATE_GOOD[g.kind] ? 12 : -12) * w; }
+        else if (it.type === "gate") { const g = it.gates.reduce((a, b) => (Math.abs(b.x - x) < Math.abs(a.x - x) ? b : a)); v += (g.ok ? 12 : -12) * w; }
         else if ((it.type === "box" || it.type === "sme" || it.type === "innov") && dx < 1.0) v += (it.type === "innov" ? 4 : 2) * w;
       }
       if (v > bestV) { bestV = v; best = x; }
@@ -2398,17 +2447,24 @@ function startGame() {
         game.score += speedAt(game.t) * gdt * 0.5 * game.mult;
         game.shield = Math.max(0, game.shield - gdt); game.magnet = Math.max(0, game.magnet - gdt);
         ui.setScore(Math.floor(game.score)); ui.setPower(game.shield, game.magnet);
-        // 기업 문 2.6초 전 안내 (구간마다 첫 문)
-        for (const g of course) if (g.type === "gate" && g.first && !game.gateAnn.has(g) && game.t >= g.t - 2.6 && game.t < g.t) {
-          game.gateAnn.add(g); sfx.banner();
-          ui.toast(`<b>기업 문을 골라요!</b><br><span class="cardget">${si === 0 ? "너무 싸면 부실 · 비싸면 세금 낭비" : si === 1 ? "🌱 중소기업 · 💡 혁신제품 문은 보너스" : "값이 똑같은 두 문 = 담합!"}</span>`, 2.4, true);
+        // 기업 문 1.6초 전(앞이 비어 있는 구간): 멈추고 가운데 카드로 상황과 보기 셋을 보여 준다
+        const g = course.find(c => c.type === "gate" && !game.asked.has(c) && c.t - game.t < 1.6 && c.t > game.t);
+        if (g) askGate(g);
+        // 종이비행기 경고: 날아오는 쪽 화면 가장자리에 ⚠
+        let warn = 0;
+        for (const it of objects.upcoming(game.t, 1.7)) if (it.type === "plane") {
+          warn = it.from; // 1 = 오른쪽에서, -1 = 왼쪽에서
+          if (!game.planeWarn.has(it)) { game.planeWarn.add(it); sfx.tick?.(); }
         }
+        ui.warn(warn);
         ui.setSection(SECTIONS[si].name, orgsLeft(si));
         ui.setProgress(game.t / TOTAL);
       }
       objects.update(game.t, gdt, player.x, () => game.state === "play" && player.st.inv <= 0);
       world.setTime(q.has("phase") ? +q.get("phase") : phaseAt(game.t));
       if (game.state === "play" && game.t >= TOTAL) finish(true);
+    } else if (st === "ask" || st === "reveal") { // 기업 문 카드: 시계를 멈추고 제자리에서 날갯짓
+      speed = 0;
     } else if (st === "dali") { // 달이 타임: 시계를 멈추고 천천히 날기만
       speed = 9;
       if (game.leave > 0 && (game.leave -= dt) <= 0) leaveDali();
@@ -2419,6 +2475,8 @@ function startGame() {
     stage.intensity = 2.6 * game.night; stageFill.intensity = 0.9 * game.night;
     stage.target.position.set(player.x + 1, -0.5, 0); stageFill.target.position.copy(stage.target.position);
     updateRide(dt);
+    pickFlash.position.set(player.x, player.y + 0.6, 0.3);
+    pickFlash.material.opacity = Math.max(0, pickFlash.material.opacity - dt * 3.5); pickFlash.scale.multiplyScalar(1 + dt * 2.5);
     shieldMesh.visible = game.shield > 0 && (game.shield > 1.5 || Math.sin(performance.now() / 60) > 0);
     shieldMesh.position.set(player.x, player.y + 0.6, 0); shieldMesh.scale.setScalar(1 + Math.sin(performance.now() / 180) * 0.04);
     fx.update(dt, speed);
@@ -2491,11 +2549,11 @@ const M = {
   sme: std(0x4fae6a), smeBand: std(0xf4fbf2),
   cloud: std(0x5d6474, { roughness: 1 }), cloudDark: std(0x434958, { roughness: 1 }), bolt: std(0xffd23f, { emissive: 0xffc300, emissiveIntensity: 0.6 }),
   eye: new THREE.MeshBasicMaterial({ color: 0xffffff }), pupil: new THREE.MeshBasicMaterial({ color: 0x1b1f27 }),
-  paper: std(0xfbfaf6, { side: THREE.DoubleSide, roughness: 0.9 }), stamp: new THREE.MeshBasicMaterial({ color: 0xd8342c, side: THREE.DoubleSide }),
+  paper: std(0xffe3dc, { side: THREE.DoubleSide, roughness: 0.9, emissive: 0xff2a1a, emissiveIntensity: 0.25 }), stamp: new THREE.MeshBasicMaterial({ color: 0xd8342c, side: THREE.DoubleSide }),
   ring: std(0xff8a1f, { emissive: 0xff7a00, emissiveIntensity: 0.55, roughness: 0.4 }),
   beam: new THREE.MeshBasicMaterial({ color: 0xffa64d, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }),
 };
-const goldGlow = glowTexture("255,206,90"), ringGlow = glowTexture("255,150,60");
+const goldGlow = glowTexture("255,206,90"), ringGlow = glowTexture("255,150,60"), redGlow = glowTexture("255,60,40");
 
 let _logo = null;
 function logoMat() {
@@ -2556,9 +2614,14 @@ function makePlane() {
   geo.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); geo.computeVertexNormals();
   const m = new THREE.Mesh(geo, M.paper); m.castShadow = true; g.add(m);
   // 빨간 "위조" 도장 (날개 위)
-  const st = new THREE.Mesh(new THREE.CircleGeometry(0.2, 20), M.stamp); st.rotation.x = -Math.PI / 2; st.position.set(0.35, 0.04, 0.3); g.add(st);
+  const st = new THREE.Mesh(new THREE.CircleGeometry(0.3, 20), M.stamp); st.rotation.x = -Math.PI / 2; st.position.set(0.35, 0.04, 0.3); g.add(st);
   const st2 = st.clone(); st2.position.z = -0.3; g.add(st2);
-  g.scale.setScalar(1.15);
+  // 위험 표시: 붉은 빛과 회전하는 경고 고리
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: redGlow, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  halo.scale.setScalar(3.6); g.add(halo); g.userData.halo = halo;
+  const warn = new THREE.Mesh(new THREE.TorusGeometry(1.25, 0.06, 6, 28), new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.85 }));
+  warn.rotation.y = Math.PI / 2; g.add(warn); g.userData.warn = warn;
+  g.scale.setScalar(1.5);
   return g;
 }
 
@@ -2610,31 +2673,34 @@ export function makeBuilding(org) {
   return g;
 }
 
-// 기업 문: 문 셋이 나란히. 간판에는 "적정가보다 몇 %"만 크게(글을 줄이고 숫자로 판단하게). 중소기업·혁신제품은 표시를 단다.
+// 기업 문: 문 셋이 나란히. 간판에는 번호와 물품 이름(자세한 설명은 문 앞에서 멈췄을 때 카드로). 중소기업·혁신제품 문은 색이 다르다.
 export const GATE_W = 2.9;
-function signTexture(g) {
+const NUM = ["①", "②", "③"];
+function signTexture(g, n) {
   const c = document.createElement("canvas"); c.width = 512; c.height = 300;
   const x = c.getContext("2d");
   x.fillStyle = "#ffffff"; x.beginPath(); x.roundRect(6, 6, 500, 288, 48); x.fill();
-  x.lineWidth = 10; x.strokeStyle = g.kind === "sme" ? "#4fae6a" : g.kind === "innov" ? "#f2b84b" : "#2f5d8a"; x.stroke();
+  x.lineWidth = 10; x.strokeStyle = g.tag === "sme" ? "#4fae6a" : g.tag === "innov" ? "#f2b84b" : "#2f5d8a"; x.stroke();
   const font = (w, px) => `${w} ${px}px 'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif`;
-  x.textAlign = "center"; x.textBaseline = "middle"; x.fillStyle = "#5b6b78"; x.font = font(800, 56);
-  x.fillText(g.kind === "sme" ? "🌱 중소기업" : g.kind === "innov" ? "💡 혁신제품" : "적정가보다", 256, 70);
-  x.fillStyle = "#1d2a33"; x.font = font(900, 150);
-  x.fillText((g.pct > 0 ? "+" : "") + g.pct + "%", 256, 196);
+  x.textAlign = "center"; x.textBaseline = "middle";
+  x.fillStyle = "#ff8a1f"; x.font = font(900, 92); x.fillText(NUM[n], 256, 86);
+  // 물품 이름: 폭에 맞춰 글자 크기를 줄인다
+  let px = 78; x.font = font(900, px);
+  while (x.measureText(g.sign).width > 460 && px > 34) { px -= 4; x.font = font(900, px); }
+  x.fillStyle = "#1d2a33"; x.fillText(g.sign, 256, 206);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
 }
 const gateM = { post: std(0x2f5d8a, { roughness: 0.5 }), sme: std(0x4fae6a, { roughness: 0.5 }), innov: std(0xf2b84b, { metalness: 0.3, roughness: 0.4, emissive: 0xf2a33b, emissiveIntensity: 0.3 }) };
 function makeGate(item) {
   const g = new THREE.Group();
-  g.userData.arches = item.gates.map(d => {
+  g.userData.arches = item.gates.map((d, n) => {
     const a = new THREE.Group(); a.position.x = d.x; g.add(a);
-    const mat = gateM[d.kind] || gateM.post;
+    const mat = gateM[d.tag] || gateM.post;
     for (const s of [-1, 1]) { const p = new THREE.Mesh(boxG, mat); p.scale.set(0.22, 3.6, 0.22); p.position.set(s * GATE_W / 2, -0.9, 0); p.castShadow = true; a.add(p); }
     const top = new THREE.Mesh(boxG, mat); top.scale.set(GATE_W + 0.22, 0.22, 0.22); top.position.y = 0.9; a.add(top);
     const fill = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W, 3.5), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide }));
     fill.position.y = -0.9; a.add(fill);
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.64), new THREE.MeshBasicMaterial({ map: signTexture(d), transparent: true, depthWrite: false, toneMapped: false }));
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.64), new THREE.MeshBasicMaterial({ map: signTexture(d, n), transparent: true, depthWrite: false, toneMapped: false }));
     sign.position.y = 2.05; a.add(sign);
     a.userData = { sign, fill };
     return a;
@@ -2677,6 +2743,10 @@ export function createObjects(scene, course, onEvent, opt = {}) {
         m.rotation.y = it.from > 0 ? 0 : Math.PI;
         m.rotation.z = Math.sin(o.phase * 6) * 0.08;
         m.position.y = 0.15 + Math.sin(o.phase * 3) * 0.15;
+        // 가까워질수록 붉은 빛이 빠르게 깜빡인다
+        const near = THREE.MathUtils.clamp(1 - tLeft / 2, 0, 1);
+        m.userData.halo.material.opacity = 0.5 + 0.5 * Math.abs(Math.sin(o.phase * (6 + near * 14)));
+        m.userData.warn.rotation.x += dt * 5; m.userData.warn.scale.setScalar(1 + 0.15 * Math.sin(o.phase * 12));
       } else if (it.type === "cloud") {
         m.position.y = Math.sin(o.phase * 1.7 + it.x) * 0.15;
         m.userData.bolt.visible = Math.sin(o.phase * 9) > -0.2;
@@ -2764,6 +2834,8 @@ export function createPlayer(scene) {
   function pose(on) { st.showTo = on ? 1 : 0; }
   // 고개 끄덕이며 날개 파닥(달이에게 "알겠어!")
   function nod() { st.nod = 0.8; }
+  // 물건을 먹었을 때 몸이 통 튀어 오른다
+  function pop() { st.pop = 0.28; }
   function reset() { Object.assign(st, { target: 0, x: 0, vx: 0, bank: 0, crash: -1, inv: 0 }); narmi.root.rotation.set(0, Math.PI, 0); narmi.root.visible = true; }
 
   function update(dt, axis = 0) {
@@ -2791,11 +2863,13 @@ export function createPlayer(scene) {
     let nodP = 0, nodF = 0;
     if (st.nod > 0) { st.nod -= dt; const u = 1 - st.nod / 0.8; nodP = Math.sin(u * Math.PI * 4) * 0.22 * (1 - u); nodF = 0.6 * (1 - u); }
     narmi.root.position.y += s * 0.25;
+    if (st.pop > 0) { st.pop -= dt; const u = 1 - st.pop / 0.28; narmi.root.scale.setScalar(0.8 * (1 + 0.28 * Math.sin(u * Math.PI))); }
+    else narmi.root.scale.setScalar(0.8);
     narmi.root.rotation.y = Math.PI + st.bank * 0.35 + st.look + s * Math.sin(st.t * 0.7) * 0.25;
     animateNarmi(narmi, st.t, { flap: 1.25 - s * 0.35 + nodF, flapSpeed: 11 - s * 4 + nodF * 10, bank: st.bank, pitch: 1.05 - s * 0.75 + nodP, tuck: 1.4 - s * 0.5 });
   }
 
-  return { narmi, st, drag, setTarget, update, crash, revive, reset, pose, nod, get x() { return st.x; }, get y() { return narmi.root.position.y; } };
+  return { narmi, st, drag, setTarget, update, crash, revive, reset, pose, nod, pop, get x() { return st.x; }, get y() { return narmi.root.position.y; } };
 }
 </script>
 <script type="text/plain" data-mod="./showcase.js">// 캐릭터 확인용 장면(?view=front|side|back|three|spin). 게임과 별개로 캐릭터만 다듬을 때 쓴다.
@@ -2995,11 +3069,35 @@ const CSS = `
 #ui .gline { font-weight:800; margin:4px 0 0; }
 #ui .newbest { display:inline-block; background:var(--tan); color:#fff; border-radius:999px; padding:3px 10px; font-size:12px; font-weight:800; margin-top:6px; animation:rise .4s .9s both; }
 #ui .btns { display:flex; flex-direction:column; }
+/* 기업 문 카드 (가운데 크게) */
+#ui .gcard { width:min(94vw,560px); text-align:left; }
+#ui .gcard .org { font-weight:800; color:var(--sub); font-size:14px; }
+#ui .gcard h3 { font-size:22px; margin:2px 0 2px; }
+#ui .gcard .ctx { font-size:16px; color:#33434f; margin-bottom:12px; }
+#ui .gopts { display:grid; gap:8px; }
+#ui .gopt { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; align-items:center; text-align:left; background:#f4f7fa; color:var(--ink); padding:12px 14px; border-radius:14px; border:2px solid transparent; }
+#ui .gopt:hover { border-color:var(--tan); background:var(--tan-soft); }
+#ui .gopt .n { grid-row:span 2; font-size:26px; font-weight:900; color:var(--tan); line-height:1; text-align:center; }
+#ui .gopt .n small { display:block; font-size:11px; color:var(--sub); font-weight:800; margin-top:3px; }
+#ui .gopt b { font-size:17px; } #ui .gopt span.d { font-size:14px; color:var(--sub); font-weight:700; }
+#ui .gopt.right { background:#e5f6ed; border-color:var(--ok); } #ui .gopt.wrong { background:#fdeaea; border-color:var(--bad); }
+#ui .gopt.dim { opacity:.45; }
+#ui .gverdict { font-size:30px; font-weight:900; margin:2px 0 8px; display:flex; align-items:center; gap:10px; }
+#ui .gverdict.ok { color:var(--ok); } #ui .gverdict.bad { color:var(--bad); }
+#ui .gverdict em { font-style:normal; font-size:16px; background:var(--tan); color:#fff; border-radius:999px; padding:3px 10px; }
+#ui .gwhy { background:#fff6ea; border-left:5px solid var(--tan); border-radius:10px; padding:10px 12px; margin:10px 0 14px; font-size:15px; line-height:1.6; color:#33434f; }
+#ui .gwhy::before { content:"달이"; display:block; color:var(--tan); font-weight:900; font-size:12px; }
+/* 종이비행기 경고: 날아오는 쪽 가장자리 */
+#ui .warn { position:absolute; top:44%; width:64px; height:64px; border-radius:50%; background:rgba(216,52,44,.92); color:#fff; display:grid; place-items:center; font-size:34px; font-weight:900;
+  box-shadow:0 0 0 6px rgba(216,52,44,.3), 0 0 30px rgba(216,52,44,.7); animation:blink .35s infinite alternate; pointer-events:none; }
+#ui .warn.l { left:max(12px, env(safe-area-inset-left,0px)); } #ui .warn.r { right:max(12px, env(safe-area-inset-right,0px)); }
+@keyframes blink { to { transform:scale(1.15); opacity:.6; } }
 @media (min-aspect-ratio: 1/1) {
   #ui .title { align-items:flex-start; padding-top:calc(env(safe-area-inset-top,0px) + 66px); padding-left:max(6vw, env(safe-area-inset-left,0px)); }
   #ui .logo { text-align:left; }
   #ui .logo h1 { font-size:clamp(40px, 10vh, 76px); }
-  #ui .screen.res, #ui .screen.low { place-items:center end; padding-right:max(5vw, env(safe-area-inset-right,0px)); background:linear-gradient(90deg, rgba(16,40,64,0) 35%, rgba(16,40,64,.3)); }
+  /* 가로 화면: 정보 카드는 가운데(달이는 카드 왼쪽에 선다) */
+  #ui .screen.res, #ui .screen.low { place-items:center; padding-left:max(18vw, env(safe-area-inset-left,0px)); background:rgba(16,40,64,.22); }
 }
 /* 가로로 눕힌 폰처럼 낮은 화면: 카드를 줄인다 */
 @media (max-height: 520px) {
@@ -3038,7 +3136,7 @@ export function createUI(opt = {}) {
       <div class="sc"><div class="num score">0</div><div class="row"><span class="mult x1">×1</span><span class="pw shield" hidden>💡 0</span><span class="pw magnet" hidden>🧲 0</span></div></div>
       <div class="right"><div class="pill"><small class="sec">아침</small><span class="org"></span></div><div class="bar"><b></b></div></div>
     </div>
-    <div class="toast"></div><div class="banner"></div><div class="flash"></div><div class="note"></div><div class="layer"></div>`;
+    <div class="warn" hidden>!</div><div class="toast"></div><div class="banner"></div><div class="flash"></div><div class="note"></div><div class="layer"></div>`;
   const $ = s => root.querySelector(s);
   const hud = $(".hud"), toast = $(".toast"), banner = $(".banner"), flash = $(".flash"), note = $(".note"), layer = $(".layer");
   let toastT = 0, bannerT = 0, noteT = 0, quizT = null, countT = null, talkT = null;
@@ -3064,6 +3162,32 @@ export function createUI(opt = {}) {
       const a = $(".pw.shield"), b = $(".pw.magnet");
       a.hidden = !(shield > 0); a.textContent = "💡" + Math.ceil(shield);
       b.hidden = !(magnet > 0); b.textContent = "🧲" + Math.ceil(magnet);
+    },
+    warn(side) { const w = $(".warn"); w.hidden = !side; w.className = "warn " + (side > 0 ? "r" : "l"); }, // side > 0 = 오른쪽에서 날아옴
+    // 기업 문 앞: 상황과 보기 셋(왼쪽·가운데·오른쪽 문). 하나를 누르면 그 문으로 날아간다.
+    gateAsk(sc, gates, onPick) {
+      const POS = ["왼쪽", "가운데", "오른쪽"], N = ["①", "②", "③"];
+      const c = screen(`<div class="card gcard" style="box-shadow:none;padding:0;width:auto"><span class="who">달이</span>
+        <div class="org">${esc(sc.org)}</div><h3>${esc(sc.need)}이 필요해요</h3><div class="ctx">${esc(sc.ctx)}</div>
+        <div class="gopts">${gates.map((g, i) => `<button class="gopt" data-i="${i}"><span class="n">${N[i]}<small>${POS[i]} 문</small></span><b>${esc(g.sign)}</b><span class="d">${esc(g.desc)}</span></button>`).join("")}</div>
+        <div class="hint" style="text-align:center">고른 문으로 나르미가 날아가요</div></div>`, "low");
+      let done = false;
+      const pick = i => { if (done) return; done = true; S("click"); layer.innerHTML = ""; onPick(i); };
+      c.querySelectorAll(".gopt").forEach(b => b.onclick = e => { e.stopPropagation(); pick(+b.dataset.i); });
+      ui._gatePick = pick;
+    },
+    // 문을 지난 뒤: 정답인지, 정답 문과 이유
+    gateReveal({ sc, gates, picked, right, pts, shield }, onGo) {
+      const ok = picked === right, N = ["①", "②", "③"], POS = ["왼쪽", "가운데", "오른쪽"];
+      const c = screen(`<div class="card gcard" style="box-shadow:none;padding:0;width:auto"><span class="who">달이</span>
+        <div class="gverdict ${ok ? "ok" : "bad"}">${ok ? "⭕ 정답!" : "❌ 아쉬워요"}${ok ? `<em>+${pts}</em>` : ""}${shield ? `<em>💡 방패 8초</em>` : ""}</div>
+        ${ok ? "" : `<div class="ctx"><b>정답은 ${N[right]} ${POS[right]} 문 · ${esc(gates[right].sign)}</b></div>`}
+        <div class="gopts">${gates.map((g, i) => `<div class="gopt ${i === right ? "right" : i === picked ? "wrong" : "dim"}"><span class="n">${N[i]}</span><b>${esc(g.sign)}${i === picked ? " ← 고름" : ""}</b><span class="d">${esc(g.desc)}</span></div>`).join("")}</div>
+        <div class="gwhy">${esc(sc.why)}</div>
+        <button class="go">나르미: 알겠어!</button></div>`, "low");
+      let done = false;
+      const go = () => { if (done) return; done = true; layer.innerHTML = ""; onGo(); };
+      on(c, ".go", go); ui._gateGo = go;
     },
     pop(text) { const el = document.createElement("div"); el.className = "pop"; el.textContent = text; $(".sc").appendChild(el); setTimeout(() => el.remove(), 900); },
     setCargo(list) { $(".cargo").innerHTML = list.map(t => `<i class="c-${t}"></i>`).join(""); },
