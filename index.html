@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-20T10:23:05.473Z">
+<meta name="build" content="2026-11-21T14:33:59.135Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -184,7 +184,8 @@ export function createAudio() {
 </script>
 <script type="text/plain" data-mod="./center.js">// 나르미 조달 센터: 하늘에 뜬 작은 도시. 가운데 조달청, 둘레에 학교·소방서·보건소·도서관.
 // 기관이 주문하면 말풍선이 뜨고, 눌러서 기업을 골라 계약하면 나르미가 날아가 배달한다. 사흘(3스테이지).
-// 시험용 주소 옵션: ?auto=1 (자동으로 가장 좋은 기업 선택), ?manual=1 (프레임 직접 진행: window.__center.step), ?day=0~2 (그날부터)
+// 하루 목표 두 개(💰 세금 아끼기 ↔ 🌱 중소·혁신 절반)가 부딪혀서, 고를 때 하루 전체를 생각해야 한다.
+// 시험용 주소 옵션: ?auto=1 (자동으로 별 세 개 조합 선택), ?manual=1 (프레임 직접 진행: window.__center.step), ?day=0~2 (그날부터)
 import * as THREE from "three";
 import { createNarmi, createDali, animateNarmi, animateDali } from "./characters.js";
 import { makeBuilding, makeBox, labelTexture } from "./objects.js";
@@ -193,7 +194,7 @@ import { createAudio } from "./audio.js";
 import { createFx } from "./fx.js";
 import { createCenterUI } from "./center_ui.js";
 import { ORGS, DAYS, FINAL_LINE } from "./center_data.js";
-import { makeOrder, judge, score, rng, WHY } from "./center_logic.js";
+import { planDay, judge, score, rng, WHY, dayStatus, dayStars, bestPicks, isTrap } from "./center_logic.js";
 import { loadKit } from "./citykit_load.js";
 
 const q = new URLSearchParams(location.search);
@@ -373,7 +374,7 @@ export async function startCenter() {
   }
 
   // ── 상태 ────────────────────────────────────────────
-  const game = { state: "title", day: 0, t: 0, orders: [], records: [], dayRecs: [], seq: 0, sel: null, why: new Set(), r: rng(1), itemUse: {}, night: 0, end: 0, fireT: 0, shift: 0, idle: 0 };
+  const game = { state: "title", day: 0, t: 0, orders: [], records: [], dayRecs: [], days: [], plan: [], picks: [], autoPicks: null, green: false, seq: 0, sel: null, why: new Set(), r: rng(1), itemUse: {}, night: 0, end: 0, fireT: 0, shift: 0, idle: 0 };
   const flight = { queue: [], cur: null, k: 0, phase: "home", from: new THREE.Vector3(), to: new THREE.Vector3(), dur: 1 };
   let best = ""; try { best = localStorage.getItem(BEST_KEY) || ""; } catch {}
 
@@ -381,9 +382,10 @@ export async function startCenter() {
   const toScreen = (p) => { v3.copy(p).project(camera); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; };
   const orgTop = k => orgs[k].g.position.clone().add(new THREE.Vector3(0, orgs[k].top + 1.2, 0));
 
+  const status = () => dayStatus(game.plan, game.picks, game.green);
   function stats() {
-    const s = score(game.records);
-    ui.setStats({ saved: s.saved, served: s.served, total: game.records.length + game.orders.filter(o => o.state === "wait").length });
+    const s = status();
+    ui.setStats({ ...s, green: game.green, served: game.dayRecs.filter(r => !r.late).length, total: game.plan.length });
   }
 
   function showTitle() {
@@ -392,14 +394,17 @@ export async function startCenter() {
     ui.title({ best }, () => { sfx.go(); newRun(); });
   }
   function newRun() {
-    Object.assign(game, { records: [], day: +(q.get("day") || 0), r: rng(Date.now() & 0xffff || 1), itemUse: {}, why: new Set(), night: 0 });
+    Object.assign(game, { records: [], days: [], day: +(q.get("day") || 0), r: rng(Date.now() & 0xffff || 1), itemUse: {}, why: new Set(), night: 0 });
     if (auto) game.r = rng(7);
     ORG_KEYS.forEach(k => orgs[k].served = 0);
     startDay();
   }
   function startDay() {
     const d = DAYS[game.day];
-    Object.assign(game, { state: "talk", t: 0, orders: [], dayRecs: [], sel: null, fireT: 0, spawned: new Set(), end: 0 });
+    const plan = planDay(d, game.r, game.itemUse);
+    Object.assign(game, { state: "talk", t: 0, orders: [], dayRecs: [], sel: null, fireT: 0, spawned: new Set(), end: 0,
+      plan, picks: plan.map(() => null), green: !!d.green });
+    game.autoPicks = auto ? (bestPicks(plan, game.green) || plan.map(o => o.bids.findIndex(b => !isTrap(b)))) : null;
     flight.queue = []; ui.hud(true); ui.setDay(d.title.split(" · ")[0]); stats();
     audio.music("title");
     daliShow(true);
@@ -410,9 +415,9 @@ export async function startCenter() {
     if (auto) ui._go();
   }
 
-  function spawn(spec) {
-    const o = makeOrder(spec, game.r, game.itemUse);
-    const item = { id: ++game.seq, ...o, left: spec.dl, state: "wait", out: 0 };
+  function spawn(n) {
+    const o = game.plan[n], spec = o;
+    const item = { id: ++game.seq, idx: n, ...o, left: spec.dl, state: "wait", out: 0 };
     game.orders.push(item);
     sfx.note();
     if (spec.fire) { // 산불: 화면이 붉게 경고, 소방서 뒤로 연기
@@ -423,15 +428,16 @@ export async function startCenter() {
   function openOrder(id) {
     const o = game.orders.find(x => x.id === id && x.state === "wait"); if (!o) return;
     game.sel = id; sfx.click();
-    ui.openSheet(o, () => o.left / o.dl, i => contract(o, i), () => { game.sel = null; ui.closeSheet(); });
+    ui.openSheet(o, status(), game.green, () => o.left / o.dl, i => contract(o, i), () => { game.sel = null; ui.closeSheet(); });
   }
   function contract(o, i) {
     if (o.state !== "wait") return;
     const j = judge(o, i), b = o.bids[i];
     o.state = "done"; o.out = 0; game.sel = null; ui.closeSheet();
-    const rec = { ...j, kind: o.kind, bestSaved: o.bestSaved, tag: b.tag, org: o.org };
+    game.picks[o.idx] = i;
+    const rec = { ...j, kind: o.kind, tag: b.tag, org: o.org };
     game.records.push(rec); game.dayRecs.push(rec);
-    if (j.sat) orgs[o.org].served++;
+    if (j.tier !== "bad") orgs[o.org].served++;
     const [x, y] = toScreen(orgTop(o.org));
     ui.float(j.saved >= 0 ? `+${j.saved.toLocaleString()}만원` : `-${(-j.saved).toLocaleString()}만원`, x, y - 70, j.tier);
     const why = j.why && !game.why.has(j.why) ? (game.why.add(j.why), WHY[j.why]) : "";
@@ -443,7 +449,8 @@ export async function startCenter() {
   function expire(o) {
     o.state = "miss"; o.out = 0;
     if (game.sel === o.id) { game.sel = null; ui.closeSheet(); }
-    const rec = { tier: "bad", saved: 0, sat: false, fair: false, late: true, kind: o.kind, bestSaved: o.bestSaved, org: o.org };
+    game.picks[o.idx] = -1;
+    const rec = { tier: "bad", saved: 0, late: true, kind: o.kind, org: o.org };
     game.records.push(rec); game.dayRecs.push(rec);
     const why = !game.why.has("late") ? (game.why.add("late"), WHY.late) : "";
     ui.say(`${ORGS[o.org].name}이(가) 기다리다 지쳤어요`, why, "bad");
@@ -452,10 +459,11 @@ export async function startCenter() {
 
   function endDay() {
     game.state = "talk";
-    const d = DAYS[game.day], s = score(game.dayRecs), last = game.day === DAYS.length - 1;
-    const chips = `<div class="day-stats"><span>납품 ${s.served}/${s.total}</span><span>세금 ${s.saved < 0 ? "-" : ""}${Math.abs(s.saved).toLocaleString()}만원 ${s.saved < 0 ? "낭비" : "절약"}</span>${s.caught ? `<span>담합 ${s.caught}건 적발</span>` : ""}</div>`;
-    daliShow(true); sfx.result(s.grade); audio.music("title");
-    ui.talk({ tag: "달이", title: `${d.title.split(" · ")[0]} 끝! 수고했어`, stats: chips, lines: [], fact: d.outro, btn: last ? "근무 끝!" : "내일도 힘내자!" }, () => {
+    const d = DAYS[game.day], st = status(), stars = dayStars(st, game.green), last = game.day === DAYS.length - 1;
+    game.days.push({ stars, st });
+    const n = [stars.deliver, stars.save, stars.green].filter(x => x === true).length, max = stars.green === null ? 2 : 3;
+    daliShow(true); sfx.result(n === max ? "S" : n ? "B" : "C"); audio.music("title");
+    ui.talk({ tag: "달이", title: `${d.title.split(" · ")[0]} 끝! 수고했어`, stats: ui.starsHTML(stars, st), lines: [], fact: d.outro, btn: last ? "근무 끝!" : "내일도 힘내자!" }, () => {
       daliShow(false);
       if (last) finale(); else { game.day++; startDay(); }
     });
@@ -468,7 +476,7 @@ export async function startCenter() {
   }
   function showResult() {
     game.state = "result";
-    const sc = score(game.records);
+    const sc = score(game.days, game.records);
     if (!best || GRADE_RANK[sc.grade] > GRADE_RANK[best]) { best = sc.grade; try { localStorage.setItem(BEST_KEY, best); } catch {} }
     sfx.result(sc.grade); daliShow(false);
     ui.result(sc, () => { game.night = 0; showTitle(); });
@@ -478,7 +486,7 @@ export async function startCenter() {
   // 자동 플레이(시험·영상용): 주문이 오면 1초 뒤 열고, 0.8초 뒤 가장 좋은 기업과 계약
   function autoPilot(dt) {
     game.idle += dt;
-    if (game.sel) { if (game.idle > 0.8) { const o = game.orders.find(x => x.id === game.sel); game.idle = 0; contract(o, o.best); } return; }
+    if (game.sel) { if (game.idle > 0.8) { const o = game.orders.find(x => x.id === game.sel); game.idle = 0; contract(o, game.autoPicks[o.idx]); } return; }
     const o = game.orders.find(x => x.state === "wait" && x.dl - x.left > 1);
     if (o && game.idle > 0.4) { game.idle = 0; openOrder(o.id); }
   }
@@ -590,7 +598,7 @@ export async function startCenter() {
       const gdt = dt * (ui.sheetOpen ? SLOW : 1);
       game.t += gdt;
       const d = DAYS[game.day];
-      for (const s of d.orders) if (!game.spawned.has(s) && game.t >= s.at) { game.spawned.add(s); spawn(s); }
+      d.orders.forEach((s, n) => { if (!game.spawned.has(n) && game.t >= s.at) { game.spawned.add(n); spawn(n); } });
       for (const o of game.orders) {
         if (o.state === "wait") { o.left -= gdt; if (o.left <= 0) expire(o); }
         else o.out += dt;
@@ -656,7 +664,7 @@ export async function startCenter() {
   if (manual || auto) endSplash();
   else { setTimeout(endSplash, Math.max(0, 2600 - (performance.now() - (window.__t0 || 0)))); splash?.addEventListener("pointerdown", endSplash); }
 
-  window.__center = { game, step, ui, orgs, narmi, dali, camera, scene, flight, contract, openOrder, score: () => score(game.records), newRun };
+  window.__center = { game, step, ui, orgs, narmi, dali, camera, scene, flight, contract, openOrder, score: () => score(game.days, game.records), status, newRun };
   if (auto) newRun(); else showTitle();
   if (!manual) {
     let last = performance.now();
@@ -708,57 +716,59 @@ export const CO = {
   collude: [["한통산업", "한통상사"], ["짜고물산", "짜고상회"], ["같이유통", "같이무역"]],
 };
 
-// 사흘 대본. kind: price(값 비교) · quality(너무 싼 저품질) · sme(중소기업) · innov(혁신제품) · collude(담합) · urgent(긴급)
-// at = 시작 뒤 몇 초에 주문이 오는지, dl = 기다려 주는 시간(초)
+// 사흘 대본. kind: price(값 비교) · quality(빨간 선 아래 부실 업체가 섞임) · innov(혁신제품) · collude(담합 둘) · urgent(긴급)
+// green = 이날 상생 목표(중소·혁신 구매 절반 이상)가 있는지. at = 시작 뒤 몇 초에 주문, dl = 기다려 주는 시간(초)
 export const DAYS = [
   {
-    title: "1일차 · 첫 출근", sub: "같은 물건이면 더 싸게",
+    title: "1일차 · 첫 출근", sub: "💰 세금을 아껴라",
     intro: [
-      "나르미, 조달청 첫 출근 축하해! 학교나 소방서 같은 공공기관은 필요한 물건을 조달청에 부탁해.",
-      "그럼 우리가 여러 기업에게 값을 써 내게 하고(입찰), 가장 알맞은 곳과 계약해. 오늘은 품질이 다 같으니까 가장 싼 곳을 고르면 돼!",
+      "나르미, 첫 출근 축하해! 학교·소방서 같은 공공기관이 물건을 부탁하면, 여러 기업에게 값을 받아(입찰) 한 곳과 계약해.",
+      "싸게 살수록 세금을 아껴. 그런데 빨간 선보다 싼 곳은 품질이 나빠서 금방 고장 나!",
     ],
-    rule: "말풍선을 누르고 → 기업 하나를 골라 계약해요",
+    rule: "💰 세금 목표 채우기 · 빨간 선 아래는 피하기",
     orders: [
       { at: 1, org: "school", kind: "price", dl: 16 },
-      { at: 9, org: "fire", kind: "price", dl: 15 },
-      { at: 16, org: "health", kind: "price", dl: 15 },
-      { at: 21, org: "library", kind: "price", dl: 15 },
-      { at: 27, org: "school", kind: "price", dl: 14 },
+      { at: 8, org: "fire", kind: "quality", dl: 15 },
+      { at: 15, org: "health", kind: "price", dl: 15 },
+      { at: 20, org: "library", kind: "quality", dl: 15 },
+      { at: 26, org: "school", kind: "price", dl: 14 },
     ],
     outro: { title: "조달청이 하는 일", src: [1, 5], text: "공공기관에 필요한 물건을 조달청이 대신 사 줘요. 여러 기업이 값을 써 내며 경쟁하면 같은 물건을 더 싸게 살 수 있어요. 이 입찰은 모두 '나라장터'라는 온라인 장터에서 해요. 아낀 돈은 모두 국민 세금이에요!" },
   },
   {
-    title: "2일차 · 싼 게 다가 아니야", sub: "품질 · 중소기업 · 혁신제품",
+    title: "2일차 · 함께 크는 조달", sub: "💰 아끼면서 🌱 절반은 중소기업",
+    green: true,
     intro: [
-      "오늘은 품질 별점도 봐야 해. 너무 싼데 별이 하나뿐이면 금방 고장 나서 다시 사야 해. 그럼 세금이 두 번 들지!",
-      "그리고 품질과 값이 비슷하면 중소기업 제품이나 새로 나온 혁신제품을 눈여겨봐. 나라가 먼저 사 주면 기업이 크는 데 큰 힘이 되거든.",
+      "오늘은 목표가 하나 더 있어. 쓴 돈의 절반 이상은 🌱중소기업이나 💡혁신제품에 써야 해.",
+      "그런데 중소기업은 조금 비싸. 다 중소기업만 고르면 세금 목표를 못 채우고, 싼 곳만 고르면 절반을 못 채워. 잘 섞어 봐!",
     ],
-    rule: "⭐ 품질 · 🌱 중소기업 · 💡 혁신제품 표시를 확인해요",
+    rule: "💰 세금 목표 + 🌱 중소·혁신 50% · 비싼 물건일수록 비율이 크게 움직여요",
     orders: [
-      { at: 1, org: "school", kind: "quality", dl: 16 },
-      { at: 7, org: "library", kind: "sme", dl: 15 },
-      { at: 13, org: "health", kind: "quality", dl: 14 },
-      { at: 18, org: "fire", kind: "innov", dl: 15 },
-      { at: 24, org: "school", kind: "sme", dl: 14 },
-      { at: 29, org: "health", kind: "innov", dl: 14 },
+      { at: 1, org: "school", kind: "price", dl: 17 },
+      { at: 7, org: "library", kind: "price", dl: 16 },
+      { at: 13, org: "health", kind: "quality", dl: 15 },
+      { at: 18, org: "fire", kind: "innov", dl: 16 },
+      { at: 24, org: "school", kind: "price", dl: 15 },
+      { at: 29, org: "health", kind: "innov", dl: 15 },
     ],
     outro: { title: "알뜰하게, 함께 크게", src: [7, 10], text: "공공기관은 전체 구매액의 50% 이상을 중소기업 제품으로 사야 해요. 그리고 새로 나온 혁신제품은 조달청이 첫 구매자가 되어 사고, 공공기관이 직접 써 보게 해요. 세금으로 기업도 함께 키우는 거예요." },
   },
   {
-    title: "3일차 · 수상한 입찰", sub: "담합을 찾아라 · 긴급 납품",
+    title: "3일차 · 수상한 입찰", sub: "🚨 담합을 찾아라 · 긴급 납품",
+    green: true,
     intro: [
-      "조심해! 가끔 기업들이 몰래 짜고 가격을 똑같이 높게 써 낼 때가 있어. 이걸 '입찰 담합'이라고 해. 법으로 금지된 반칙이야.",
-      "이름이 비슷하고 값이 똑같이 비싼 곳들은 의심해 봐. 그리고 재난이 나면 급한 주문부터 빨리 처리해야 해!",
+      "조심해! 기업 둘이 몰래 짜고 똑같이 비싼 값을 써 낼 때가 있어. 이게 '입찰 담합'이야. 법으로 금지된 반칙이지.",
+      "값이 똑같은 두 곳은 의심해! 그리고 불이 나면 소방서 주문부터 빨리.",
     ],
-    rule: "🚨 값이 똑같이 비싼 기업들은 담합을 의심해요",
+    rule: "🚨 값이 똑같은 두 곳 = 담합 · 목표는 어제와 같아요",
     orders: [
-      { at: 1, org: "school", kind: "collude", dl: 16 },
-      { at: 7, org: "library", kind: "price", dl: 14 },
-      { at: 12, org: "health", kind: "quality", dl: 14 },
-      { at: 17, org: "fire", kind: "urgent", dl: 9, fire: true },
-      { at: 20, org: "fire", kind: "urgent", dl: 9 },
-      { at: 25, org: "library", kind: "collude", dl: 14 },
-      { at: 30, org: "school", kind: "innov", dl: 14 },
+      { at: 1, org: "school", kind: "collude", dl: 17 },
+      { at: 7, org: "library", kind: "price", dl: 15 },
+      { at: 12, org: "health", kind: "quality", dl: 15 },
+      { at: 17, org: "fire", kind: "urgent", dl: 10, fire: true },
+      { at: 20, org: "fire", kind: "urgent", dl: 10 },
+      { at: 25, org: "library", kind: "collude", dl: 15 },
+      { at: 30, org: "school", kind: "innov", dl: 15 },
     ],
     outro: { title: "담합은 반칙", src: [13, 16], text: "경쟁해야 할 기업들이 몰래 짜고 값을 정하는 입찰 담합은 법으로 금지돼 있어요. 걸리면 과징금을 내고, 최대 2년까지 공공입찰에 참가할 수 없게 될 수 있어요. 공정한 경쟁이 세금을 지켜요." },
   },
@@ -769,8 +779,16 @@ export const FINAL_LINE = "우리가 하는 일이 바로 이거야. 국민 세�
 // 결과 등급
 export const GRADE_LINE = { S: "조달의 달인이 나타났다!", A: "든든한 조달 요원이에요!", B: "조금만 더 하면 베테랑!", C: "내일은 더 잘할 수 있어요" };
 </script>
-<script type="text/plain" data-mod="./center_logic.js">// 나르미 조달 센터 규칙: 입찰 3건 만들기, 고른 기업 판정, 하루·전체 점수. 화면과 무관해서 따로 시험할 수 있다.
+<script type="text/plain" data-mod="./center_logic.js">// 나르미 조달 센터 규칙: 하루치 주문·입찰 만들기, 계약 판정, 하루 별(납품·세금·상생), 전체 등급.
+// 정답이 하나인 문제가 아니라 하루 목표 두 개가 부딪힌다:
+//   💰 세금 아끼기(싼 대기업) ↔ 🌱 중소·혁신 구매 절반 이상(조금 비싼 곳, 금액 기준)
+// 함정은 그림으로 보인다: 빨간 선(적정가의 LOW)보다 싸면 부실, 같은 값을 써 낸 두 곳은 담합.
+// 화면과 무관해서 따로 시험할 수 있다.
 import { ITEMS, CO } from "./center_data.js";
+
+export const LOW = 0.8;        // 이보다 싸면 부실 위험(게임용 단순화)
+export const SAVE_GOAL = 0.07; // 하루 세금 목표: 적정가 합의 7% 아끼기
+export const SME_GOAL = 0.5;   // 하루 상생 목표: 쓴 돈의 절반 이상을 중소기업·혁신제품에
 
 // 시드 고정 난수 (같은 판이면 같은 입찰)
 export function rng(seed = 1) {
@@ -781,98 +799,132 @@ const pick = (r, a) => a[Math.floor(r() * a.length)];
 const shuffle = (r, a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const won = (p0, k) => Math.max(1, Math.round(p0 * k / (p0 >= 500 ? 10 : 1)) * (p0 >= 500 ? 10 : 1)); // 큰 금액은 10만원 단위
 
-// 주문 하나 만들기. 같은 판에서 같은 기관 물건이 겹치지 않게 itemUse로 돌려 쓴다.
-export function makeOrder(spec, r, itemUse = {}) {
+// 주문 하나. green = 이날 상생 목표가 있는지(중소기업이 입찰에 나온다)
+export function makeOrder(spec, r, itemUse = {}, green = false) {
   const list = ITEMS[spec.org];
   const i = (itemUse[spec.org] = ((itemUse[spec.org] ?? Math.floor(r() * list.length)) + 1) % list.length);
   const item = list[i], p0 = item.p;
   const names = shuffle(r, CO.big.slice());
-  const B = (name, k, q, tag = "") => ({ name, price: won(p0, k), q, tag });
+  const j = () => (r() - 0.5) * 0.04;
+  const B = (name, k, tag = "") => ({ name, price: won(p0, k), tag });
+  const big = n => B(names[n], [0.86, 1.08, 1.14][n] + j());
+  const sme = () => B(pick(r, CO.sme), 0.95 + j(), "sme");
   let bids;
   switch (spec.kind) {
-    case "quality":
-      bids = [B(pick(r, CO.cheap), 0.6, 1), B(names[0], 0.9, 3), B(names[1], 1.18, 3)]; break;
-    case "sme":
-      bids = [B(names[0], 0.92, 3), B(pick(r, CO.sme), 0.92, 3, "sme"), B(names[1], 1.15, 3)]; break;
-    case "innov":
-      bids = [B(names[0], 0.95, 3), B(pick(r, CO.innov), 1.0, 3, "innov"), B(pick(r, CO.cheap), 0.6, 1)];
-      bids[1].desc = item.innov; break;
+    case "quality": bids = [B(pick(r, CO.cheap), 0.58 + j(), "dump"), big(0), green ? sme() : big(1)]; break;
+    case "innov": bids = [big(0), { ...B(pick(r, CO.innov), 1.06 + j(), "innov"), desc: item.innov }, green ? sme() : big(1)]; break;
     case "collude": {
-      const [a, b] = pick(r, CO.collude);
-      bids = [B(a, 1.28, 3, "collude"), B(b, 1.28, 3, "collude"), B(names[0], 0.97, 3)]; break;
+      const [a, b] = pick(r, CO.collude), k = 1.22 + j();
+      bids = [B(a, k, "collude"), B(b, k, "collude"), green && r() < 0.5 ? sme() : B(names[0], 0.9 + j())]; break;
     }
-    default: { // price, urgent: 품질 같고 값만 다름
-      const ks = shuffle(r, [0.84, 1.0, 1.16]).map(k => k + (r() - 0.5) * 0.04);
-      bids = ks.map((k, j) => B(names[j], k, 3));
-    }
+    default: bids = [big(0), green ? sme() : big(1), big(2)]; // price, urgent
   }
-  bids = shuffle(r, bids);
-  const best = bestBid(spec.kind, bids);
-  return { ...spec, item, p0, bids, best, bestSaved: p0 - bids[best].price };
+  return { ...spec, item, p0, bids: shuffle(r, bids) };
 }
 
-// 가장 좋은 선택: 저품질·담합 제외. sme/innov 주문이면 그 표시가 붙은 곳. 아니면 가장 싼 곳.
-export function bestBid(kind, bids) {
-  const ok = bids.map((b, i) => [b, i]).filter(([b]) => b.q > 1 && b.tag !== "collude");
-  const want = kind === "sme" ? "sme" : kind === "innov" ? "innov" : "";
-  const tagged = want && ok.find(([b]) => b.tag === want);
-  if (tagged) return tagged[1];
-  return ok.sort((x, y) => x[0].price - y[0].price)[0][1];
+export const isTrap = b => b.tag === "dump" || b.tag === "collude";
+export const isGreen = b => b.tag === "sme" || b.tag === "innov";
+
+// 한 번 계약했을 때 쓰는 돈. 부실은 금방 고장 나 같은 물건을 다시 사야 한다(적정가만큼 더).
+export const cost = (o, b) => b.price + (b.tag === "dump" ? o.p0 : 0);
+
+// 하루 목표 계산. picks: 주문마다 고른 입찰 번호(-1 = 놓침)
+export function dayStatus(orders, picks, green) {
+  let p0 = 0, spent = 0, gspent = 0, ok = true;
+  orders.forEach((o, n) => {
+    const i = picks[n];
+    if (i == null) return;
+    if (i < 0) { ok = false; return; }
+    const b = o.bids[i], c = cost(o, b);
+    p0 += o.p0; spent += c; if (isGreen(b)) gspent += b.price;
+    if (isTrap(b)) ok = false;
+  });
+  const saved = p0 - spent, total = orders.reduce((a, o) => a + o.p0, 0);
+  const goal = Math.round(total * SAVE_GOAL);
+  const share = spent ? gspent / spent : 0;
+  return { saved, goal, share, spent, ok, starSave: saved >= goal, starGreen: !green || share >= SME_GOAL };
 }
 
-// 판정: tier good / meh / bad, saved(만원, 음수면 낭비), msg(한 줄), why(처음 한 번 달이가 덧붙이는 설명 키)
+// 하루치 주문을 미리 만든다. 상생 목표가 있는 날은 "가장 싼 곳만"도 "중소기업만"도 안 되고,
+// 섞어야만 별 세 개가 나오는 판이 될 때까지 다시 뽑는다.
+export function planDay(day, r, itemUse = {}) {
+  for (let tries = 0; ; tries++) {
+    const use = { ...itemUse };
+    const orders = day.orders.map(s => makeOrder(s, r, use, !!day.green));
+    if (!day.green || tries > 40) { Object.assign(itemUse, use); return orders; }
+    const safe = orders.map(o => o.bids.map((b, i) => [b, i]).filter(([b]) => !isTrap(b)));
+    const cheap = safe.map(l => l.reduce((a, x) => (x[0].price < a[0].price ? x : a))[1]);
+    const greenest = safe.map(l => (l.find(([b]) => isGreen(b)) || l.reduce((a, x) => (x[0].price < a[0].price ? x : a)))[1]);
+    const st = p => dayStatus(orders, p, true);
+    const both = p => { const s = st(p); return s.starSave && s.starGreen; };
+    if (both(cheap) || both(greenest)) continue;
+    if (bestPicks(orders, true)) { Object.assign(itemUse, use); return orders; }
+  }
+}
+
+// 별 세 개가 나오는 고르기 하나(자동 플레이·시험용). 없으면 null.
+export function bestPicks(orders, green) {
+  const safe = orders.map(o => o.bids.map((b, i) => [b, i]).filter(([b]) => !isTrap(b)).map(x => x[1]));
+  let best = null, bestSaved = -Infinity;
+  const p = [];
+  (function go(n) {
+    if (n === orders.length) {
+      const s = dayStatus(orders, p, green);
+      if (s.starSave && s.starGreen && s.saved > bestSaved) { bestSaved = s.saved; best = p.slice(); }
+      return;
+    }
+    for (const i of safe[n]) { p[n] = i; go(n + 1); }
+  })(0);
+  return best;
+}
+
+// 계약 한 건 판정: tier good / meh / bad, saved(만원), msg(짧게), why(처음 한 번 달이가 덧붙이는 설명 키)
 export function judge(o, i) {
-  const b = o.bids[i], saved = o.p0 - b.price, cheapest = Math.min(...o.bids.filter(x => x.q > 1 && x.tag !== "collude").map(x => x.price));
+  const b = o.bids[i], saved = o.p0 - cost(o, b);
   const W = n => `${Math.abs(n).toLocaleString()}만원`;
-  if (b.q === 1) return { tier: "bad", saved: -b.price, sat: false, msg: `싸서 샀는데 금방 고장! 다시 사야 해서 ${W(b.price)} 낭비`, why: "quality" };
-  if (b.tag === "collude") return { tier: "bad", saved, sat: true, fair: false, msg: `담합 업체였어요! 세금 ${W(saved)}이 더 나갔어요`, why: "collude" };
-  const base = { saved, sat: true };
-  if (o.kind === "collude") return { ...base, tier: "good", fair: true, caught: true, msg: `담합을 피했어요! 정직한 기업과 계약 · ${W(saved)} 절약`, why: "caught" };
-  if (o.kind === "sme") return b.tag === "sme"
-    ? { ...base, tier: "good", fair: true, msg: `중소기업과 계약! 판로를 넓혀 줬어요`, why: "sme" }
-    : { ...base, tier: "meh", fair: false, msg: b.price > cheapest ? `더 비싼 곳이었어요 (${W(b.price - cheapest)} 더)` : `값·품질이 같다면 중소기업 제품을 먼저!`, why: "smeMiss" };
-  if (o.kind === "innov") return b.tag === "innov"
-    ? { ...base, tier: "good", fair: true, msg: `혁신제품 첫 구매! "${b.desc}"`, why: "innov" }
-    : { ...base, tier: "meh", fair: false, msg: `새 혁신제품을 써 볼 기회였어요`, why: "innovMiss" };
-  if (b.price <= cheapest) return { ...base, tier: "good", msg: `가장 알맞은 곳과 계약! ${W(saved)} 절약`, why: saved > 0 ? "compete" : "" };
-  return { ...base, tier: "meh", msg: `더 싼 곳이 있었어요 (${W(b.price - cheapest)} 더)`, why: "compete" };
+  if (b.tag === "dump") return { tier: "bad", saved, msg: `금방 고장! 다시 사느라 ${W(o.p0)} 더`, why: "quality" };
+  if (b.tag === "collude") return { tier: "bad", saved, msg: `담합 업체! ${W(-saved)} 더 냈어요`, why: "collude" };
+  if (b.tag === "innov") return { tier: "good", saved, msg: `💡 혁신제품 첫 구매!`, why: "innov" };
+  if (b.tag === "sme") return { tier: "good", saved, msg: `🌱 중소기업과 계약`, why: "sme" };
+  const caught = o.kind === "collude";
+  return { tier: saved > 0 ? "good" : "meh", saved, caught, msg: caught ? `담합을 피했어요!` : saved > 0 ? `${W(saved)} 아꼈어요` : `${W(-saved)} 더 냈어요`, why: caught ? "caught" : "compete" };
 }
 
 // 처음 한 번 달이가 덧붙이는 이유 (출처 번호는 docs/퀴즈_출처.md)
 export const WHY = {
   compete: "여러 기업이 경쟁하면 값이 내려가. 그래서 조달청은 입찰을 붙여!",
-  quality: "너무 싸고 품질이 낮으면 금방 고장 나. 결국 세금이 두 번 들어.",
+  quality: "빨간 선보다 싸면 품질이 떨어져 금방 고장 나. 결국 세금이 두 번 들어.",
   sme: "공공기관은 구매액의 50% 이상을 중소기업 제품으로 사야 해.",
-  smeMiss: "값과 품질이 같다면 중소기업 제품을 사 주는 게 좋아. 공공기관은 구매액의 50% 이상을 중소기업 제품으로 사야 하거든.",
   innov: "새로 나온 혁신제품은 조달청이 첫 구매자가 돼. 공공기관이 써 보는 '테스트베드'가 되는 거야.",
-  innovMiss: "혁신제품은 팔 곳을 찾기 어려워. 조달청이 먼저 사 주면 기업이 클 수 있어.",
-  collude: "이름이 비슷하고 값이 똑같이 비싼 곳들, 수상하지 않았어? 짜고 값을 올리는 게 담합이야.",
+  collude: "값이 똑같이 비싼 두 곳, 수상하지 않았어? 짜고 값을 올리는 게 담합이야.",
   caught: "잘 찾았어! 담합한 업체는 최대 2년까지 공공입찰에 못 나올 수 있어.",
   late: "기관은 물건이 꼭 필요해서 부탁한 거야. 늦으면 수업이나 출동에 차질이 생겨!",
 };
 
-// 점수: 기관 만족(제때·제대로), 세금 절약(가장 알맞은 선택 대비), 공정·상생(중소·혁신·담합 주문에서 바른 선택)
-export function score(records) {
-  const n = records.length || 1;
-  const sat = records.filter(r => r.sat).length / n;
-  const saved = records.reduce((a, r) => a + (r.saved || 0), 0);
-  const bestSum = records.reduce((a, r) => a + Math.max(0, r.bestSaved), 0) || 1;
-  const tax = Math.max(0, Math.min(1, saved / bestSum));
-  const opp = records.filter(r => ["sme", "innov", "collude"].includes(r.kind));
-  const fair = opp.length ? opp.filter(r => r.fair).length / opp.length : 1;
-  const avg = (sat + tax + fair) / 3;
-  const grade = avg >= 0.9 ? "S" : avg >= 0.75 ? "A" : avg >= 0.55 ? "B" : "C";
+// 하루 별: 납품(놓친 주문·함정 없이), 세금(목표만큼 아낌), 상생(중소·혁신 절반 이상, 목표 있는 날만)
+export function dayStars(st, green) {
+  return { deliver: st.ok, save: st.starSave, green: green ? st.starGreen : null };
+}
+export const starCount = s => [s.deliver, s.save, s.green].filter(x => x === true).length;
+export const starMax = s => (s.green === null ? 2 : 3);
+
+// 전체 결과. days: [{ stars, st }], records: 계약 기록
+export function score(days, records) {
+  const got = days.reduce((a, d) => a + starCount(d.stars), 0), max = days.reduce((a, d) => a + starMax(d.stars), 0) || 1;
+  const k = got / max;
+  const grade = k >= 0.95 ? "S" : k >= 0.7 ? "A" : k >= 0.45 ? "B" : "C";
   return {
-    sat, tax, fair, avg, grade, saved,
-    served: records.filter(r => r.sat).length, total: records.length,
+    got, max, grade,
+    saved: records.reduce((a, r) => a + (r.saved || 0), 0),
+    served: records.filter(r => !r.late && r.tier !== "bad").length, total: records.length,
     sme: records.filter(r => r.tag === "sme").length, innov: records.filter(r => r.tag === "innov").length,
-    caught: records.filter(r => r.caught).length, late: records.filter(r => r.late).length,
-    points: Math.round(avg * 1000),
+    caught: records.filter(r => r.caught).length, trap: records.filter(r => r.tag === "dump" || r.tag === "collude").length,
   };
 }
 </script>
 <script type="text/plain" data-mod="./center_ui.js">// 나르미 조달 센터 화면: 시작, 점수판, 기관 위 주문 말풍선, 입찰 시트, 달이 대화, 하루 정리, 결과.
 import { ORGS, GRADE_LINE, FINAL_LINE } from "./center_data.js";
+import { LOW, SME_GOAL, isGreen } from "./center_logic.js";
 
 const CSS = `
 #ui [hidden] { display:none !important; }
@@ -938,7 +990,7 @@ const CSS = `
 #ui .sh-head button.x { width:34px; height:34px; padding:0; border-radius:50%; background:#eef2f5; color:var(--ink); font-size:16px; flex:none; }
 #ui .sh-ask { font-size:13px; font-weight:800; color:var(--tan); margin:10px 0 6px; }
 #ui .bids { display:grid; gap:8px; }
-#ui .bid { display:grid; grid-template-columns:1fr auto; grid-template-areas:"co pr" "q pr" "d d"; align-items:center; gap:2px 10px; text-align:left; background:#f4f7fa; color:var(--ink); padding:11px 14px; border-radius:14px; border:2px solid transparent; font-size:15px; }
+#ui .bid { display:grid; grid-template-columns:1fr auto; grid-template-areas:"co pr" "ru ru" "d fx"; align-items:center; gap:2px 10px; text-align:left; background:#f4f7fa; color:var(--ink); padding:11px 14px; border-radius:14px; border:2px solid transparent; font-size:15px; }
 #ui .bid:active { border-color:var(--tan); background:var(--tan-soft); }
 #ui .bid .co { grid-area:co; font-weight:900; font-size:16px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
 #ui .bid .chip { font-size:11px; font-weight:800; padding:2px 7px; border-radius:999px; }
@@ -953,6 +1005,42 @@ const CSS = `
 #ui .bid .d { grid-area:d; font-size:13px; color:#7a5a00; font-weight:700; margin-top:3px; }
 #ui .sheet .timer { height:6px; border-radius:3px; background:#eef2f5; overflow:hidden; margin-top:12px; }
 #ui .sheet .timer b { display:block; height:100%; background:var(--tan); width:100%; }
+
+/* 하루 목표 막대 (점수판) */
+#ui .goal { background:var(--card); border-radius:999px; padding:6px 12px 6px 9px; box-shadow:0 2px 10px rgba(20,50,80,.12); display:flex; align-items:center; gap:7px; font-weight:800; font-size:14px; white-space:nowrap; }
+#ui .goal .gb { position:relative; width:64px; height:9px; border-radius:5px; background:#e6ebef; overflow:visible; }
+#ui .goal .gb b { position:absolute; left:0; top:0; bottom:0; border-radius:5px; background:var(--tan); width:0; transition:width .4s, background .3s; }
+#ui .goal .gb i { position:absolute; top:-3px; bottom:-3px; width:2px; margin-left:-1px; background:var(--ink); border-radius:1px; }
+#ui .goal.met .gb b { background:var(--ok); }
+#ui .goal.neg .gv { color:var(--bad); }
+#ui .goal .gv { font-variant-numeric:tabular-nums; }
+#ui .goal .gv small { color:var(--sub); font-weight:700; font-size:11px; }
+#ui .goal.met .gv::after { content:" ✓"; color:var(--ok); }
+
+/* 가격 자: 빨간 구간 = 부실 위험, 검은 눈금 = 적정가, 동그라미 = 이 기업 값 */
+#ui .ruler { grid-area:ru; position:relative; height:12px; margin:6px 2px 2px; }
+#ui .ruler::before { content:""; position:absolute; left:0; right:0; top:4px; height:4px; border-radius:2px; background:#dde4ea; }
+#ui .ruler .lowz { position:absolute; left:0; top:3px; height:6px; border-radius:3px 0 0 3px; background:repeating-linear-gradient(-45deg, var(--bad) 0 4px, #f17b74 4px 8px); }
+#ui .ruler .ref { position:absolute; top:-1px; width:2px; height:14px; margin-left:-1px; background:var(--ink); }
+#ui .ruler .dot { position:absolute; top:0; width:12px; height:12px; margin-left:-6px; border-radius:50%; background:var(--tan); box-shadow:0 0 0 2px #fff; }
+#ui .ruler .dot.lo { background:var(--bad); }
+#ui .sh-legend { display:flex; gap:12px; font-size:12px; font-weight:800; color:var(--sub); margin:10px 0 6px; align-items:center; }
+#ui .sh-legend .k1::before { content:""; display:inline-block; width:14px; height:6px; border-radius:2px; margin-right:4px; vertical-align:1px; background:repeating-linear-gradient(-45deg, var(--bad) 0 4px, #f17b74 4px 8px); }
+#ui .sh-legend .k2::before { content:""; display:inline-block; width:2px; height:12px; margin-right:5px; vertical-align:-2px; background:var(--ink); }
+#ui .bid .fx { grid-area:fx; display:flex; gap:6px; justify-content:flex-end; font-size:12px; font-weight:800; }
+#ui .bid .fx span { background:#fff; border-radius:999px; padding:2px 8px; }
+#ui .bid .fx .up { color:var(--ok); } #ui .bid .fx .dn { color:var(--bad); }
+
+/* 하루 별 */
+#ui .stars { display:grid; gap:6px; margin:6px 0 12px; }
+#ui .stars .st { display:grid; grid-template-columns:30px 1fr auto; align-items:center; gap:8px; background:#f4f7fa; border-radius:12px; padding:8px 12px; }
+#ui .stars .st > span:first-child { font-size:22px; filter:grayscale(1); opacity:.35; }
+#ui .stars .st.on > span:first-child { filter:none; opacity:1; animation:stamp .5s both; }
+#ui .stars .st b { font-size:15px; } #ui .stars .st small { display:block; color:var(--sub); font-size:12px; font-weight:700; }
+#ui .stars .st em { font-style:normal; font-weight:900; font-variant-numeric:tabular-nums; font-size:14px; }
+#ui .stars .st.on em { color:var(--ok); } #ui .stars .st:not(.on) em { color:var(--bad); }
+#ui .bigstar { font-size:44px; font-weight:900; color:var(--tan); line-height:1; }
+#ui .bigstar small { font-size:18px; color:var(--sub); }
 
 /* 큰 글자 안내 */
 #ui .banner { position:absolute; left:0; right:0; top:30%; text-align:center; font-size:clamp(28px,7vw,48px); font-weight:900; color:#fff;
@@ -1046,7 +1134,9 @@ export function createCenterUI(opt = {}) {
   root.innerHTML = `
     <div class="bubs"></div>
     <div class="hud" hidden>
-      <div class="l"><div class="pill"><small class="day">1일차</small></div><div class="pill"><small>세금 절약</small><span class="won">0</span><small>만원</small></div></div>
+      <div class="l"><div class="pill"><small class="day">1일차</small></div>
+        <div class="goal g-save" title="세금 목표"><span>💰</span><div class="gb"><b></b></div><span class="gv"></span></div>
+        <div class="goal g-green" title="중소기업·혁신제품 구매 비율"><span>🌱</span><div class="gb"><b></b><i style="left:${SME_GOAL * 100}%"></i></div><span class="gv"></span></div></div>
       <div class="r"><div class="pill"><small>납품</small><span class="srv">0</span></div>${sndBtn()}</div>
     </div>
     <div class="say"></div><div class="banner"></div>
@@ -1087,9 +1177,26 @@ export function createCenterUI(opt = {}) {
     get busy() { return layer.childElementCount > 0; },
     hud(show) { hud.hidden = !show; },
     setDay(t) { $(".day").textContent = t; },
-    setStats({ saved, served, total }) {
-      const w = $(".won"); w.textContent = (saved < 0 ? "-" : "") + W(saved); w.classList.toggle("neg", saved < 0);
+    // 하루 목표: 💰 아낀 돈 / 목표, 🌱 중소·혁신에 쓴 비율 / 50% (목표 있는 날만)
+    setStats({ saved, goal, share, green, served, total }) {
+      const gs = $(".g-save"), gg = $(".g-green");
+      gs.querySelector("b").style.width = Math.max(0, Math.min(1, saved / goal)) * 100 + "%";
+      gs.querySelector(".gv").innerHTML = `${saved < 0 ? "-" : ""}${W(saved)}<small>/${W(goal)}만원</small>`;
+      gs.classList.toggle("met", saved >= goal); gs.classList.toggle("neg", saved < 0);
+      gg.hidden = !green;
+      gg.querySelector("b").style.width = Math.min(1, share) * 100 + "%";
+      gg.querySelector(".gv").innerHTML = `${Math.round(share * 100)}<small>%</small>`;
+      gg.classList.toggle("met", share >= SME_GOAL);
       $(".srv").textContent = `${served}/${total}`;
+    },
+    // 하루 끝 별 세 개
+    starsHTML(stars, st) {
+      const row = (on, ic, name, note, val) => on === null ? "" : `<div class="st ${on ? "on" : ""}"><span>⭐</span><div><b>${ic} ${name}</b><small>${note}</small></div><em>${val}</em></div>`;
+      return `<div class="stars">
+        ${row(stars.deliver, "📦", "제대로 납품", "놓친 주문·부실·담합 없이", stars.deliver ? "✓" : "✗")}
+        ${row(stars.save, "💰", "세금 아끼기", `목표 ${W(st.goal)}만원`, `${st.saved < 0 ? "-" : ""}${W(st.saved)}만원`)}
+        ${row(stars.green, "🌱", "함께 크기", "중소기업·혁신제품에 절반 이상", `${Math.round(st.share * 100)}%`)}
+      </div>`;
     },
     // 말풍선 맞추기. list: {id, emoji, label, k(남은 비율), urgent, x, y, state: wait|done|miss, sel}
     bubbles(list, onTap) {
@@ -1131,18 +1238,22 @@ export function createCenterUI(opt = {}) {
       banner.innerHTML = esc(title) + (sub ? `<small>${esc(sub)}</small>` : ""); bannerT = secs;
     },
     // 입찰 시트. o = 주문, left() = 남은 비율, onPick(i), onClose()
-    openSheet(o, left, onPick, onClose) {
+    // 입찰 시트. o = 주문, st = 지금 하루 상태(고르면 어떻게 바뀌는지 미리 보여 준다), left() = 남은 비율
+    openSheet(o, st, green, left, onPick, onClose) {
       const org = ORGS[o.org];
+      const pos = k => Math.max(0, Math.min(1, (k - 0.5) / 0.8)) * 100; // 자: 적정가의 50%~130%
       sheet.innerHTML = `<div class="sh-head"><div><div class="org">${org.emoji} ${esc(org.name)}${o.kind === "urgent" ? ` · <span style="color:var(--bad)">긴급!</span>` : ""}</div>
           <h3>${o.item.e} ${esc(o.item.n)}</h3><div class="ref">적정가 <b>${W(o.p0)}만원</b></div></div><button class="x" aria-label="닫기">✕</button></div>
-        <div class="sh-ask">어느 기업과 계약할까요?</div>
+        <div class="sh-legend"><span class="k1">부실 위험</span><span class="k2">적정가</span></div>
         <div class="bids">${o.bids.map((b, i) => {
-          const d = Math.round((b.price / o.p0 - 1) * 100);
-          const diff = d < 0 ? `<em class="dn">적정가보다 ${-d}%↓</em>` : d > 0 ? `<em class="up">적정가보다 ${d}%↑</em>` : `<em class="eq">적정가</em>`;
+          const k = b.price / o.p0, sv = o.p0 - b.price;
           const chip = b.tag === "sme" ? `<span class="chip sme">🌱 중소기업</span>` : b.tag === "innov" ? `<span class="chip innov">💡 혁신제품</span>` : "";
+          const share = (st.spent + b.price) ? (st.share * st.spent + (isGreen(b) ? b.price : 0)) / (st.spent + b.price) : 0;
           return `<button class="bid" data-i="${i}"><div class="co">${esc(b.name)}${chip}</div>
-            <div class="q">${stars(b.q)}<small>품질</small></div>
-            <div class="pr">${W(b.price)}<small>만원</small>${diff}</div>${b.desc ? `<div class="d">💡 ${esc(b.desc)}</div>` : ""}</button>`;
+            <div class="pr">${W(b.price)}<small>만원</small></div>
+            <div class="ruler"><span class="lowz" style="width:${pos(LOW)}%"></span><span class="ref" style="left:${pos(1)}%"></span><span class="dot ${k < LOW ? "lo" : ""}" style="left:${pos(k)}%"></span></div>
+            ${b.desc ? `<div class="d">💡 ${esc(b.desc)}</div>` : `<div class="d"></div>`}
+            <div class="fx"><span class="${sv >= 0 ? "up" : "dn"}">💰 ${sv >= 0 ? "+" : "-"}${W(sv)}</span>${green ? `<span class="${share >= SME_GOAL ? "up" : ""}">🌱→${Math.round(share * 100)}%</span>` : ""}</div></button>`;
         }).join("")}</div><div class="timer"><b></b></div>`;
       sheet.classList.add("show");
       sheet.querySelectorAll(".bid").forEach(el => el.onclick = e => { e.stopPropagation(); onPick(+el.dataset.i); });
@@ -1169,19 +1280,14 @@ export function createCenterUI(opt = {}) {
     title(info, onGo) {
       layer.innerHTML = `<div class="title">${sndBtn("position:absolute;right:max(14px, env(safe-area-inset-right,0px));top:calc(env(safe-area-inset-top,0px) + 12px)")}
         <div class="logo"><small>2026 조달청 공공조달 게임</small><h1>나르미<br>조달 센터</h1></div>
-        <div class="panel"><p>학교·소방서·보건소·도서관이 필요한 물건을 부탁해요. <b>좋은 기업을 골라 계약</b>하면 나르미가 날아가 배달해요. 선배 달이와 함께하는 사흘간의 조달청 근무!</p>
+        <div class="panel"><p>공공기관이 부탁한 물건, 어느 기업과 계약할까? <b>💰 세금은 아끼고 🌱 중소기업도 키우는</b> 두 목표를 함께 맞춰 하루 ⭐3개를 모아요.</p>
         <button class="go">출근하기</button>${info.best ? `<div class="best">최고 등급 <b>${esc(info.best)}</b></div>` : ""}</div></div>`;
       on(layer, ".go", () => { layer.innerHTML = ""; onGo(); });
       ui._go = () => layer.querySelector(".go").click();
     },
     result(sc, onAgain) {
-      const pct = k => Math.round(k * 100) + "%";
       const c = screen(`<div class="gradebox"><div class="grade">${sc.grade}</div><div><h2>사흘 근무 끝!</h2><div class="gl">${GRADE_LINE[sc.grade]}</div></div></div>
-        <div class="meters">
-          <div class="meter"><span>기관 만족</span><div class="bar"><b style="--w:${pct(sc.sat)}"></b></div><span>${pct(sc.sat)}</span></div>
-          <div class="meter"><span>세금 절약</span><div class="bar"><b style="--w:${pct(sc.tax)}"></b></div><span>${pct(sc.tax)}</span></div>
-          <div class="meter"><span>공정·상생</span><div class="bar"><b style="--w:${pct(sc.fair)}"></b></div><span>${pct(sc.fair)}</span></div>
-        </div>
+        <div class="bigstar" style="margin:12px 0 10px">⭐ ${sc.got}<small> / ${sc.max}</small></div>
         <div class="did"><small>나르미가 사흘 동안 한 일 = 조달청이 하는 일</small><ul>
           <li>🏫 공공기관 주문 ${sc.total}건 중 <b>${sc.served}건</b> 제대로 납품</li>
           <li>💰 세금 <b>${(sc.saved < 0 ? "-" : "") + W(sc.saved)}만원</b> ${sc.saved < 0 ? "낭비" : "절약"}</li>
@@ -1190,7 +1296,6 @@ export function createCenterUI(opt = {}) {
         </ul></div>
         <div class="final">${esc(FINAL_LINE)}</div>
         <button class="again">다시 출근하기</button>`);
-      requestAnimationFrame(() => requestAnimationFrame(() => c.querySelectorAll(".meter .bar b").forEach(b => b.style.width = b.style.getPropertyValue("--w"))));
       on(c, ".again", () => { layer.innerHTML = ""; onAgain(); });
       ui._go = () => c.querySelector(".again").click();
     },
