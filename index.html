@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-21T16:35:23.354Z">
+<meta name="build" content="2026-11-21T16:42:50.641Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -3072,6 +3072,8 @@ const CSS = `
 #ui .gcard .org { font-weight:800; color:var(--sub); font-size:14px; }
 #ui .gcard h3 { font-size:22px; margin:2px 0 2px; }
 #ui .gcard .ctx { font-size:16px; color:#33434f; margin-bottom:12px; }
+#ui .gq h3 { font-size:28px; } #ui .gq .ctx { font-size:18px; line-height:1.55; }
+#ui .gonce { background:#fff3d6; border:2px dashed var(--tan); border-radius:12px; padding:10px 12px; font-size:15px; font-weight:800; color:#7a4a12; margin:4px 0 14px; line-height:1.5; }
 #ui .gopts { display:grid; gap:8px; }
 #ui .gopt { display:grid; grid-template-columns:4.2em 1fr; gap:2px 12px; align-items:center; text-align:left; background:#f4f7fa; color:var(--ink); padding:12px 14px; border-radius:14px; border:2px solid transparent; }
 #ui .gkey { text-align:center; font-size:14px; color:var(--sub); font-weight:700; margin:12px 0 10px; line-height:1.5; }
@@ -3092,8 +3094,13 @@ const CSS = `
 #ui .warn.l { left:max(12px, env(safe-area-inset-left,0px)); } #ui .warn.r { right:max(12px, env(safe-area-inset-right,0px)); }
 @keyframes blink { to { transform:scale(1.15); opacity:.6; } }
 /* 큰 PC 화면: 카드를 통째로 키운다(집중해서 읽게) */
-@media (min-width: 1000px) and (min-height: 640px) { #ui .screen > .card { zoom:1.18; } }
-@media (min-width: 1400px) and (min-height: 880px) { #ui .screen > .card { zoom:1.45; } }
+@media (min-width: 1000px) and (min-height: 640px) { #ui .screen > .card { zoom:1.4; } }
+@media (min-width: 1400px) and (min-height: 880px) { #ui .screen > .card { zoom:1.75; } }
+#ui .screen > .card:has(.gcard) { width:min(92vw,520px); }
+/* 정답 카드는 길어서 화면 높이에 맞춰 덜 키운다 */
+@media (min-width: 1000px) and (min-height: 640px) { #ui .screen > .card:has(.gr) { zoom:1.2; } }
+@media (min-width: 1000px) and (min-height: 780px) { #ui .screen > .card:has(.gr) { zoom:1.4; } }
+@media (min-width: 1400px) and (min-height: 960px) { #ui .screen > .card:has(.gr) { zoom:1.65; } }
 @media (min-aspect-ratio: 1/1) {
   #ui .title { align-items:flex-start; padding-top:calc(env(safe-area-inset-top,0px) + 66px); padding-left:max(6vw, env(safe-area-inset-left,0px)); }
   #ui .logo { text-align:left; }
@@ -3167,25 +3174,42 @@ export function createUI(opt = {}) {
     },
     warn(side) { const w = $(".warn"); w.hidden = !side; w.className = "warn " + (side > 0 ? "r" : "l"); }, // side > 0 = 오른쪽에서 날아옴
     // 기업 문 앞: 상황과 보기 셋(왼쪽·가운데·오른쪽 문). 읽기만 하고, 닫은 뒤 직접 움직여 그 문으로 지나간다.
+    // 문 앞: ① 질문 카드(한 번만 보여 줌) → ② 보기 3개 카드 → 직접 그 문으로 지나간다
     gateAsk(sc, gates, onClose) {
       toast.classList.remove("show"); toastT = 0;
       const POS = ["왼쪽", "가운데", "오른쪽"], N = ["①", "②", "③"];
-      const c = screen(`<div class="card gcard" style="box-shadow:none;padding:0;width:auto"><span class="who">달이</span>
-        <div class="org">${esc(sc.org)}</div><h3>${esc(sc.need)}가 필요해요</h3><div class="ctx">${esc(sc.ctx)}</div>
-        <div class="gopts">${gates.map((g, i) => `<div class="gopt"><span class="n">${N[i]}<small>${POS[i]} 문</small></span><b>${esc(g.sign)}</b><span class="d">${esc(g.desc)}</span></div>`).join("")}</div>
-        <div class="gkey">어느 문으로 갈지 정했으면 출발! <b>PC</b> ← → 키 · <b>폰</b> 좌우로 끌어서 그 문으로 지나가요</div>
-        <button class="go">출발!</button></div>`, "low");
-      let done = false;
+      let step = 0, done = false, ready = false;
+      const arm = () => { ready = false; setTimeout(() => (ready = true), 350); }; // 직전에 누르던 키로 바로 넘어가지 않게
       const close = () => { if (done) return; done = true; removeEventListener("keydown", onKey); layer.innerHTML = ""; onClose(); };
-      // 키보드: Enter·스페이스·방향키 어느 것이든 닫고 바로 움직이기 시작
-      const onKey = e => { if (["Enter", " ", "ArrowLeft", "ArrowRight", "a", "d", "A", "D"].includes(e.key)) { if (e.key === " " || e.key === "Enter") e.preventDefault(); S("click"); close(); } };
-      setTimeout(() => addEventListener("keydown", onKey), 250); // 직전에 누르던 키로 바로 닫히지 않게
-      on(c, ".go", close); ui._gateClose = close;
+      const opts = () => {
+        step = 1; arm();
+        const c = screen(`<div class="card gcard" style="box-shadow:none;padding:0;width:auto"><span class="who">달이</span>
+          <h3>어느 문으로 갈까?</h3>
+          <div class="gopts">${gates.map((g, i) => `<div class="gopt"><span class="n">${N[i]}<small>${POS[i]} 문</small></span><b>${esc(g.sign)}</b><span class="d">${esc(g.desc)}</span></div>`).join("")}</div>
+          <div class="gkey">정했으면 출발! <b>← →</b> 키(폰은 좌우로 끌기)로 그 문을 지나가요</div>
+          <button class="go">출발!</button></div>`, "low");
+        on(c, ".go", close);
+      };
+      const c = screen(`<div class="card gcard gq" style="box-shadow:none;padding:0;width:auto"><span class="who">달이의 부탁</span>
+        <div class="org">${esc(sc.org)}</div><h3>${esc(sc.need)}가 필요해요</h3><div class="ctx">${esc(sc.ctx)}</div>
+        <div class="gonce">👀 이 부탁은 지금 딱 한 번만 보여 줘요. 어디서, 무엇에 쓸지 잘 기억해 둬!</div>
+        <button class="go">다 읽었어요 · 보기 3개 →</button></div>`, "low");
+      on(c, ".go", opts); arm();
+      // 질문 카드: Enter·스페이스로 넘김. 보기 카드: Enter·스페이스·방향키로 닫고 바로 움직임
+      const onKey = e => {
+        if (!ready) return;
+        const go = e.key === "Enter" || e.key === " ";
+        if (go) e.preventDefault();
+        if (step === 0 && go) { S("click"); opts(); }
+        else if (step === 1 && (go || ["ArrowLeft", "ArrowRight", "a", "d", "A", "D"].includes(e.key))) { S("click"); close(); }
+      };
+      addEventListener("keydown", onKey);
+      ui._gateClose = close;
     },
     // 문을 지난 뒤: 정답인지, 정답 문과 이유
     gateReveal({ sc, gates, picked, right, pts, shield }, onGo) {
       const ok = picked === right, N = ["①", "②", "③"], POS = ["왼쪽", "가운데", "오른쪽"];
-      const c = screen(`<div class="card gcard" style="box-shadow:none;padding:0;width:auto"><span class="who">달이</span>
+      const c = screen(`<div class="card gcard gr" style="box-shadow:none;padding:0;width:auto"><span class="who">달이</span>
         <div class="gverdict ${ok ? "ok" : "bad"}">${ok ? "⭕ 정답!" : "❌ 아쉬워요"}${ok ? `<em>+${pts}</em>` : ""}${shield ? `<em>💡 방패 8초</em>` : ""}</div>
         ${ok ? "" : `<div class="ctx"><b>정답은 ${N[right]} ${POS[right]} 문 · ${esc(gates[right].sign)}</b></div>`}
         <div class="gopts">${gates.map((g, i) => `<div class="gopt ${i === right ? "right" : i === picked ? "wrong" : "dim"}"><span class="n">${N[i]}</span><b>${esc(g.sign)}${i === picked ? " ← 고름" : ""}</b><span class="d">${esc(g.desc)}</span></div>`).join("")}</div>
