@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-21T14:33:59.135Z">
+<meta name="build" content="2026-11-21T15:01:09.621Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -1935,6 +1935,18 @@ export const ORDERS = [
   ["school", "health"],
 ];
 
+// 기업 문: 구간마다 두 번. 문 셋 중 하나를 골라 통과한다(간판 = 적정가보다 몇 %).
+//   good 알맞게 싼 곳 · sme 🌱 중소기업 · innov 💡 혁신제품(방패) → 좋음
+//   dump 너무 싼 곳(부실, 상자가 부서짐) · pricey 비싼 곳 · collude 같은 값 두 곳(담합) → 콤보가 끊김
+export const GATE_X = [-3, 0, 3];
+const GATE_SETS = [
+  [["good", "dump", "pricey"], ["good", "pricey", "dump"]],
+  [["sme", "dump", "pricey"], ["innov", "dump", "pricey"]],
+  [["collude", "collude", "good"], ["collude", "collude", "sme"]],
+];
+const PCT = { good: [-12, -8], sme: [-6, -3], innov: [4, 7], dump: [-48, -40], pricey: [15, 22], collude: [24, 29] };
+export const GATE_GOOD = { good: true, sme: true, innov: true };
+
 // 코스 만들기. 항목: { t, type, x, ... }
 //   box(일반) · innov(혁신제품) · sme(중소기업) · cloud(담합 먹구름) · plane(위조 서류 종이비행기, x는 도착 위치) · ring(배송 링, org)
 export function buildCourse(seed = 20261122) {
@@ -1948,12 +1960,23 @@ export function buildCourse(seed = 20261122) {
     const diff = si; // 0 쉬움, 1 보통, 2 어려움
     const gap = [0.75, 0.6, 0.5][diff];
     const ringTimes = [sec.start + 11, sec.start + 23];
-    let ringIdx = 0;
+    const gateTimes = [sec.start + 6.5, sec.start + 17];
+    let ringIdx = 0, gateIdx = 0;
     let t = sec.start + (si === 0 ? 3 : 1.2);
     let free = 2; // 직전 패턴에서 비어 있던 줄(여기서 너무 멀리 떨어진 곳만 길로 남기지 않게)
     let smeLeft = si === 0 ? 1 : 2; // 구간마다 중소기업 상자 줄 수
 
     while (t < sec.end - 1.2) {
+      // 기업 문 차례: 앞뒤를 비워 간판을 읽고 고를 시간을 준다
+      if (gateIdx < 2 && t >= gateTimes[gateIdx] - 1.1) {
+        const kinds = GATE_SETS[si][gateIdx].slice(); shuffle(kinds, rnd);
+        const lo = (a, b) => Math.round(a + rnd() * (b - a));
+        const same = lo(...PCT.collude);
+        const gates = kinds.map((k, n) => ({ x: GATE_X[n], kind: k, pct: k === "collude" ? same : lo(...PCT[k]) }));
+        add(t + 1.1, "gate", 2, { gates, first: gateIdx === 0 });
+        gateIdx++; t += 1.1 + 1.3;
+        continue;
+      }
       // 배송 링 차례: 같은 줄에 상자 3개를 놓아 링으로 이끈다
       if (ringIdx < 2 && t >= ringTimes[ringIdx] - 1.4) {
         const slot = clampSlot(free + ri(3) - 1);
@@ -2009,7 +2032,7 @@ import { createUI } from "./ui.js";
 import { createLearn } from "./learn.js";
 import { CARDS, TOPIC_OF } from "./facts.js";
 import { createDali, animateDali } from "./characters.js";
-import { buildCourse, SECTIONS, TOTAL, speedAt, phaseAt, sectionAt, SLOTS } from "./level.js";
+import { buildCourse, SECTIONS, TOTAL, speedAt, phaseAt, sectionAt, SLOTS, GATE_GOOD } from "./level.js";
 import { createObjects, dropBox, ORG_NAMES } from "./objects.js";
 import { createAudio } from "./audio.js";
 import { createFx } from "./fx.js";
@@ -2023,10 +2046,13 @@ if (q.has("view")) {
   startGame();
 }
 
-const VALUE = { box: 10, sme: 10, innov: 20 }; // 배달할 때 상자 한 개 점수
-const RING_BONUS = 20, SME_BONUS = 30;
+// 점수: 날아간 거리 + 상자 + 배달 + 좋은 기업 문. 모두 콤보 배수(×1~×5)를 곱한다.
+// 콤보는 좋은 문·배달로 오르고, 나쁜 문(부실·비싼 곳·담합)이나 쓰러짐으로 ×1이 된다.
+const PICK = { box: 50, sme: 50, innov: 100 };
+const RING_PTS = 200, CARGO_PTS = 50, GATE_PTS = 300, MULT_MAX = 5;
+const SHIELD_T = 8, MAGNET_T = 6;               // 혁신제품 문 = 방패, 중소기업 상자 3개 = 자석 (초)
 const CAPTION_GAP = 4.0;                       // 상식 자막 사이 최소 간격(초)
-const BEST_KEY = "narmi-best-v1";
+const BEST_KEY = "narmi-best-v2"; // 점수 체계가 바뀌어 새로 센다
 const LABEL = { box: "조달 상자", innov: "혁신제품 상자", sme: "중소기업 상자", cloud: "담합 먹구름을 피했어요", plane: "위조 서류를 피했어요" };
 
 function startGame() {
@@ -2075,10 +2101,25 @@ function startGame() {
     sme: "초록 상자는 중소기업이 만든 제품이야.", pps: "우리 조달청 이야기 하나 해 줄게." };
 
   // state: title · brief · play · crash · quiz · result
-  const game = { state: "title", t: 0, slow: 1, score: 0, cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1,
+  const game = { state: "title", t: 0, slow: 1, score: 0, mult: 1, shield: 0, magnet: 0, gatesGood: 0, gateSeen: new Set(), gateAnn: new Set(), cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1,
     done: new Set(), endT: 0, revived: false, capT: 0, breakShown: new Set(), lastHit: null, bullet: 0, bk: 1, night: 0, rideT: -1, rideOut: -1 };
   const drops = [];
-  const objects = createObjects(scene, course, onEvent);
+  const objects = createObjects(scene, course, onEvent, { magnet: () => game.magnet > 0 });
+  // 방패: 나르미를 감싸는 금빛 거품
+  const shieldMesh = new THREE.Mesh(new THREE.SphereGeometry(1.15, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending }));
+  shieldMesh.visible = false; scene.add(shieldMesh);
+  // 기업 문 결과: 좋은 문은 점수·콤보, 나쁜 문은 콤보가 끊기고 대가를 치른다. 처음 한 번만 이유를 덧붙인다.
+  const GATE_MSG = {
+    good: ["적정가로 계약!", "여러 기업이 경쟁하면 값이 알맞게 내려가요"],
+    sme: ["🌱 중소기업과 계약!", "공공기관은 구매액의 50% 이상을 중소기업 제품으로 사요"],
+    innov: ["💡 혁신제품 첫 구매! 방패 8초", "조달청은 새 혁신제품의 첫 구매자가 돼요"],
+    dump: ["너무 싸서 부실! 상자가 부서졌어요", "너무 싸면 품질이 떨어져 결국 세금이 두 번 들어요"],
+    pricey: ["비싸게 샀어요 · 세금 낭비", "같은 물건이면 알맞은 값에 사야 세금을 아껴요"],
+    collude: ["담합 업체! 값이 똑같은 두 곳은 반칙", "짜고 값을 올리는 담합은 법으로 금지돼 있어요"],
+  };
+  const GATE_TOPIC = { good: "naraj", sme: "sme", innov: "innov", collude: "fair", dump: "pps", pricey: "naraj" };
+  function addPts(n) { const p = n * game.mult; game.score += p; ui.pop(`+${p}`); return p; }
+  function setMult(m) { const up = m > game.mult; game.mult = Math.max(1, Math.min(MULT_MAX, m)); ui.setMult(game.mult, up); }
   const input = createInput(r => game.state === "play" && player.drag(r));
 
   function caption(type, extra = "") {
@@ -2088,11 +2129,28 @@ function startGame() {
     game.capT = CAPTION_GAP;
   }
 
-  function onEvent(kind, it) {
-    if (kind === "pick") {
+  function onEvent(kind, it, gate) {
+    if (kind === "gate") {
+      const good = GATE_GOOD[gate.kind], [msg, why] = GATE_MSG[gate.kind];
+      const first = !game.gateSeen.has(gate.kind); game.gateSeen.add(gate.kind);
+      if (good) {
+        game.gatesGood++; setMult(game.mult + 1); const p = addPts(GATE_PTS);
+        sfx.right(); fx.ring(player.x); cam.punch = 4;
+        if (gate.kind === "sme") { game.cargo.push("sme"); countSme(); }
+        else if (gate.kind === "innov") { game.cargo.push("innov"); game.shield = SHIELD_T; }
+        else game.cargo.push("box");
+        ui.toast(`<b>${msg} +${p}</b>${first ? `<br><span class="cardget">${why}</span>` : ""}`, first ? 2.6 : 1.6, true);
+      } else {
+        setMult(1); sfx.wrong(); fx.hit(player.x, player.y + 0.9); cam.shake = 0.25; ui.flash();
+        if (gate.kind === "dump" || gate.kind === "collude") game.cargo = [];
+        ui.toast(`<b style="color:var(--bad)">${msg}</b>${first ? `<br><span class="cardget">${why}</span>` : ""}`, first ? 2.8 : 1.8, true);
+      }
+      learn.line(GATE_TOPIC[gate.kind]); game.capT = CAPTION_GAP;
+    } else if (kind === "pick") {
       game.cargo.push(it.type); game.boxes++;
       sfx.pick(it.type); fx.pick(player.x, it.type);
-      if (it.type === "sme" && ++game.sme % 3 === 0) { game.score += SME_BONUS; caption("sme", `중소기업 상자 3개 +${SME_BONUS}`); }
+      addPts(PICK[it.type]);
+      if (it.type === "sme") countSme();
       else if (game.capT <= 0) caption(it.type);
     } else if (kind === "pass") {
       if (Math.abs(it.x - player.x) < 3.2) sfx.whoosh();
@@ -2100,8 +2158,8 @@ function startGame() {
     } else if (kind === "ring") {
       game.done.add(it);
       if (!game.cargo.length) { ui.toast(`${ORG_NAMES[it.org]}: 상자가 없어요`); sfx.miss(); return; }
-      const pts = game.cargo.reduce((a, c) => a + VALUE[c], 0) + RING_BONUS;
-      game.score += pts; game.delivered++;
+      setMult(game.mult + 1);
+      const pts = addPts(RING_PTS + game.cargo.length * CARGO_PTS); game.delivered++;
       game.innov += game.cargo.filter(c => c === "innov").length;
       drops.push(dropBox(scene, player.x, game.cargo.includes("innov") ? "innov" : "box"));
       sfx.ring(); fx.ring(player.x); cam.punch = 7; game.bullet = 0.55; // 배달 순간 잠깐 느리게
@@ -2111,6 +2169,11 @@ function startGame() {
       game.done.add(it);
       ui.toast(`${ORG_NAMES[it.org]}을(를) 지나쳤어요`); sfx.miss();
     } else if (kind === "hit") {
+      if (game.shield > 0) { // 방패가 한 번 막아 준다
+        game.shield = 0; player.revive(1); sfx.revive(); fx.revive(player.x, player.y + 0.9); cam.shake = 0.3;
+        ui.toast("<b>💡 방패가 막았어요!</b>", 1.4); return;
+      }
+      setMult(1);
       game.state = "crash"; game.endT = 0; game.lastHit = it;
       player.crash(); ui.flash();
       sfx.hit(); fx.hit(player.x, player.y + 0.9); cam.shake = 0.55; audio.music("off");
@@ -2118,14 +2181,20 @@ function startGame() {
     }
     ui.setScore(game.score); ui.setCargo(game.cargo);
   }
+  // 중소기업 상자 3개마다 자석
+  function countSme() {
+    if (++game.sme % 3) { if (game.capT <= 0) caption("sme"); return; }
+    game.magnet = MAGNET_T; sfx.ring();
+    ui.toast(`<b>🌱 중소기업 상자 3개 · 자석 ${MAGNET_T}초!</b>`, 1.8, true); game.capT = CAPTION_GAP;
+  }
 
   function reset() {
     objects.reset(); player.reset(); learn.reset(); ui.clear();
-    Object.assign(game, { t: 0, slow: 1, score: 0, cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1,
+    Object.assign(game, { t: 0, slow: 1, score: 0, mult: 1, shield: 0, magnet: 0, gatesGood: 0, gateSeen: new Set(), gateAnn: new Set(), cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1,
       done: new Set(), endT: 0, revived: false, capT: 0, breakShown: new Set(), lastHit: null, bullet: 0, bk: 1, night: 0, rideT: -1, rideOut: -1 });
     ride.visible = false;
     fx.clear();
-    ui.setScore(0); ui.setCargo([]);
+    ui.setScore(0); ui.setCargo([]); ui.setMult(1); ui.setPower(0, 0);
   }
 
   function showTitle() {
@@ -2172,7 +2241,8 @@ function startGame() {
     if (player.st.crash >= 0) player.revive(0); // 쓰러진 채 끝났으면 다시 일으켜 결과 화면에서 얼굴을 보여 준다
     const r = game.delivered, n = rings.length;
     const grade = cleared && r === n && game.innov >= 2 ? "S" : r >= n - 1 ? "A" : r >= n / 2 ? "B" : "C";
-    const res = { title: cleared ? "오늘의 배송 끝!" : "배송 중에 쓰러졌어요", grade, score: game.score, delivered: r, rings: n, innov: game.innov, boxes: game.boxes,
+    game.score = Math.floor(game.score);
+    const res = { title: cleared ? "오늘의 배송 끝!" : "배송 중에 쓰러졌어요", grade, score: game.score, gates: game.gatesGood, gateTotal: course.filter(i => i.type === "gate").length, delivered: r, rings: n, innov: game.innov, boxes: game.boxes,
       seen: learn.seenCards, fresh: learn.freshIds, dexCount: learn.dexCount, best, newBest: game.score > best };
     if (res.newBest) { best = game.score; try { localStorage.setItem(BEST_KEY, best); } catch {} }
     setTimeout(() => sfx.result(grade), 350);
@@ -2234,12 +2304,13 @@ function startGame() {
   function autoPilot() {
     const up = objects.upcoming(game.t, 1.6);
     let best = player.x, bestV = -1e9;
-    for (const x of [...SLOTS, player.x]) {
+    for (const x of [...SLOTS, -3, 3, player.x]) {
       let v = -Math.abs(x - player.x) * 0.3;
       for (const it of up) {
         const soon = it.t - game.t, w = 1 / (0.3 + soon), dx = Math.abs(it.x - x);
         if ((it.type === "cloud" || it.type === "plane") && dx < 1.6 && soon < 0.9) v -= 100 * w;
         else if (it.type === "ring" && dx < 1.2) v += 8 * w;
+        else if (it.type === "gate") { const g = it.gates.reduce((a, b) => (Math.abs(b.x - x) < Math.abs(a.x - x) ? b : a)); v += (GATE_GOOD[g.kind] ? 12 : -12) * w; }
         else if ((it.type === "box" || it.type === "sme" || it.type === "innov") && dx < 1.0) v += (it.type === "innov" ? 4 : 2) * w;
       }
       if (v > bestV) { bestV = v; best = x; }
@@ -2323,6 +2394,15 @@ function startGame() {
         for (let i = 0; i < SECTIONS.length - 1; i++) {
           if (game.t >= SECTIONS[i].end + 0.3 && !game.breakShown.has(i)) { game.breakShown.add(i); daliTime(i); break; }
         }
+        // 거리 점수(초당 약 속도만큼) × 콤보, 방패·자석 시간
+        game.score += speedAt(game.t) * gdt * 0.5 * game.mult;
+        game.shield = Math.max(0, game.shield - gdt); game.magnet = Math.max(0, game.magnet - gdt);
+        ui.setScore(Math.floor(game.score)); ui.setPower(game.shield, game.magnet);
+        // 기업 문 2.6초 전 안내 (구간마다 첫 문)
+        for (const g of course) if (g.type === "gate" && g.first && !game.gateAnn.has(g) && game.t >= g.t - 2.6 && game.t < g.t) {
+          game.gateAnn.add(g); sfx.banner();
+          ui.toast(`<b>기업 문을 골라요!</b><br><span class="cardget">${si === 0 ? "너무 싸면 부실 · 비싸면 세금 낭비" : si === 1 ? "🌱 중소기업 · 💡 혁신제품 문은 보너스" : "값이 똑같은 두 문 = 담합!"}</span>`, 2.4, true);
+        }
         ui.setSection(SECTIONS[si].name, orgsLeft(si));
         ui.setProgress(game.t / TOTAL);
       }
@@ -2339,6 +2419,8 @@ function startGame() {
     stage.intensity = 2.6 * game.night; stageFill.intensity = 0.9 * game.night;
     stage.target.position.set(player.x + 1, -0.5, 0); stageFill.target.position.copy(stage.target.position);
     updateRide(dt);
+    shieldMesh.visible = game.shield > 0 && (game.shield > 1.5 || Math.sin(performance.now() / 60) > 0);
+    shieldMesh.position.set(player.x, player.y + 0.6, 0); shieldMesh.scale.setScalar(1 + Math.sin(performance.now() / 180) * 0.04);
     fx.update(dt, speed);
     for (let i = drops.length - 1; i >= 0; i--) if (!drops[i](dt, speed)) drops.splice(i, 1);
     world.update(dt, speed, player.x);
@@ -2371,7 +2453,7 @@ function startGame() {
   window.__ready = true;
 }
 </script>
-<script type="text/plain" data-mod="./objects.js">// 코스 위의 물건들: 상자 3종, 담합 먹구름, 위조 서류 종이비행기, 배송 링과 아래 수요기관 건물.
+<script type="text/plain" data-mod="./objects.js">// 코스 위의 물건들: 상자 3종, 담합 먹구름, 위조 서류 종이비행기, 배송 링과 아래 수요기관 건물, 기업 문(셋 중 하나를 골라 통과).
 // 대본(level.js)의 시각을 거리로 바꿔, 나르미 앞 SPAWN 거리 안에 들어오면 만들고 지나가면 치운다.
 import * as THREE from "three";
 import { LOGO_V } from "./assets.js";
@@ -2528,9 +2610,42 @@ export function makeBuilding(org) {
   return g;
 }
 
+// 기업 문: 문 셋이 나란히. 간판에는 "적정가보다 몇 %"만 크게(글을 줄이고 숫자로 판단하게). 중소기업·혁신제품은 표시를 단다.
+export const GATE_W = 2.9;
+function signTexture(g) {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 300;
+  const x = c.getContext("2d");
+  x.fillStyle = "#ffffff"; x.beginPath(); x.roundRect(6, 6, 500, 288, 48); x.fill();
+  x.lineWidth = 10; x.strokeStyle = g.kind === "sme" ? "#4fae6a" : g.kind === "innov" ? "#f2b84b" : "#2f5d8a"; x.stroke();
+  const font = (w, px) => `${w} ${px}px 'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif`;
+  x.textAlign = "center"; x.textBaseline = "middle"; x.fillStyle = "#5b6b78"; x.font = font(800, 56);
+  x.fillText(g.kind === "sme" ? "🌱 중소기업" : g.kind === "innov" ? "💡 혁신제품" : "적정가보다", 256, 70);
+  x.fillStyle = "#1d2a33"; x.font = font(900, 150);
+  x.fillText((g.pct > 0 ? "+" : "") + g.pct + "%", 256, 196);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+const gateM = { post: std(0x2f5d8a, { roughness: 0.5 }), sme: std(0x4fae6a, { roughness: 0.5 }), innov: std(0xf2b84b, { metalness: 0.3, roughness: 0.4, emissive: 0xf2a33b, emissiveIntensity: 0.3 }) };
+function makeGate(item) {
+  const g = new THREE.Group();
+  g.userData.arches = item.gates.map(d => {
+    const a = new THREE.Group(); a.position.x = d.x; g.add(a);
+    const mat = gateM[d.kind] || gateM.post;
+    for (const s of [-1, 1]) { const p = new THREE.Mesh(boxG, mat); p.scale.set(0.22, 3.6, 0.22); p.position.set(s * GATE_W / 2, -0.9, 0); p.castShadow = true; a.add(p); }
+    const top = new THREE.Mesh(boxG, mat); top.scale.set(GATE_W + 0.22, 0.22, 0.22); top.position.y = 0.9; a.add(top);
+    const fill = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W, 3.5), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide }));
+    fill.position.y = -0.9; a.add(fill);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.64), new THREE.MeshBasicMaterial({ map: signTexture(d), transparent: true, depthWrite: false, toneMapped: false }));
+    sign.position.y = 2.05; a.add(sign);
+    a.userData = { sign, fill };
+    return a;
+  });
+  return g;
+}
+
 // ── 실행 ─────────────────────────────────────────────
 // onEvent(kind, item): "pick"(상자), "hit"(장애물), "pass"(장애물을 피함), "ring"(링 통과), "miss"(링을 놓침)
-export function createObjects(scene, course, onEvent) {
+// opt.magnet(): 자석이 켜져 있으면 가까운 상자가 나르미 쪽으로 끌려온다
+export function createObjects(scene, course, onEvent, opt = {}) {
   let next = 0;
   const live = [];
 
@@ -2540,7 +2655,7 @@ export function createObjects(scene, course, onEvent) {
   }
 
   function spawn(item) {
-    const mesh = item.type === "cloud" ? makeCloud() : item.type === "plane" ? makePlane() : item.type === "ring" ? makeRing(item.org) : makeBox(item.type);
+    const mesh = item.type === "cloud" ? makeCloud() : item.type === "plane" ? makePlane() : item.type === "ring" ? makeRing(item.org) : item.type === "gate" ? makeGate(item) : makeBox(item.type);
     mesh.position.set(item.x, 0, -999);
     scene.add(mesh);
     live.push({ item, mesh, d: distAt(item.t), done: false, phase: Math.random() * 6 });
@@ -2573,8 +2688,13 @@ export function createObjects(scene, course, onEvent) {
         m.userData.label.material.opacity = fade; m.userData.glow.material.opacity = 0.6 * fade;
         // 지나간 링은 작아지며 사라진다 (배달 슬로모션 때 화면을 가리지 않게)
         if (o.done) { const s = THREE.MathUtils.clamp(1 - z / 3, 0, 1); m.userData.ring.scale.setScalar(s); m.userData.glow.scale.setScalar(5 * s); }
+      } else if (it.type === "gate") {
+        m.position.x = 0; m.position.y = 0;
+        // 고른 문만 남고 나머지는 흐려진다
+        if (o.done) m.userData.arches.forEach((a, k) => { if (k !== o.pick) { a.userData.sign.material.opacity *= 0.85; a.visible = a.userData.sign.material.opacity > 0.05; } });
       } else {
         m.rotation.y += dt * 1.6; m.position.y = 0.1 + Math.sin(o.phase * 3) * 0.18;
+        if (opt.magnet?.() && z > -16 && z < 0.5) m.position.x += (px - m.position.x) * (1 - Math.exp(-dt * 7));
         if (m.userData.spark) m.userData.spark.rotation.y -= dt * 3;
       }
 
@@ -2583,6 +2703,11 @@ export function createObjects(scene, course, onEvent) {
         o.done = true;
         const dx = Math.abs(m.position.x - px);
         if (it.type === "ring") onEvent(dx < 1.6 ? "ring" : "miss", it);
+        else if (it.type === "gate") {
+          // 문 셋이 폭 전체를 덮으므로 가장 가까운 문을 지난 것으로 본다
+          let k = 0; it.gates.forEach((g, n) => { if (Math.abs(g.x - px) < Math.abs(it.gates[k].x - px)) k = n; });
+          o.pick = k; onEvent("gate", it, it.gates[k]);
+        }
         else if (it.type === "cloud" || it.type === "plane") {
           if (canHit() && dx < (it.type === "cloud" ? 1.25 : 1.05)) onEvent("hit", it);
           else onEvent("pass", it); // 피함: 자막 기회
@@ -2777,7 +2902,19 @@ const CSS = `
 #ui .right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
 #ui .bar { width:120px; height:6px; border-radius:3px; background:rgba(255,255,255,.6); overflow:hidden; }
 #ui .bar b { display:block; height:100%; width:0; background:var(--tan); }
-#ui .toast { position:absolute; left:50%; top:calc(env(safe-area-inset-top,0px) + 66px); transform:translate(-50%,0); background:var(--card); padding:9px 16px; border-radius:14px;
+/* 가운데 위 큰 점수 + 콤보 배수 + 방패·자석 */
+#ui .sc { position:absolute; left:50%; top:calc(env(safe-area-inset-top,0px) + 8px); transform:translateX(-50%); text-align:center; pointer-events:none; }
+#ui .sc .num { font-size:clamp(30px, 8vw, 44px); font-weight:900; color:#fff; font-variant-numeric:tabular-nums; line-height:1; letter-spacing:-1px;
+  text-shadow:0 3px 0 var(--tan), 0 6px 18px rgba(20,50,80,.35); }
+#ui .sc .row { display:flex; gap:5px; justify-content:center; margin-top:5px; min-height:22px; }
+#ui .sc .mult { background:var(--tan); color:#fff; font-weight:900; font-size:14px; border-radius:999px; padding:2px 9px; }
+#ui .sc .mult.x1 { background:rgba(255,255,255,.75); color:var(--sub); }
+#ui .sc .mult.up { animation:bump .35s; }
+#ui .sc .pw { background:var(--card); font-weight:800; font-size:13px; border-radius:999px; padding:2px 8px; font-variant-numeric:tabular-nums; }
+#ui .sc .pop { position:absolute; left:50%; top:100%; transform:translateX(-50%); font-weight:900; color:#fff; font-size:18px; text-shadow:0 2px 0 var(--tan), 0 0 6px rgba(0,0,0,.25); animation:popup .9s ease-out forwards; white-space:nowrap; }
+@keyframes bump { 40% { transform:scale(1.35); } }
+@keyframes popup { 0% { opacity:0; transform:translate(-50%,6px); } 20% { opacity:1; } 100% { opacity:0; transform:translate(-50%,-28px); } }
+#ui .toast { position:absolute; left:50%; top:calc(env(safe-area-inset-top,0px) + 96px); transform:translate(-50%,0); background:var(--card); padding:9px 16px; border-radius:14px;
   font-weight:700; line-height:1.4; box-shadow:0 4px 16px rgba(20,50,80,.15); opacity:0; transition:opacity .2s, transform .2s; width:max-content; max-width:min(90vw,560px); text-align:center; }
 #ui .toast b { color:var(--tan); }
 #ui .toast.show { opacity:1; transform:translate(-50%,6px); }
@@ -2836,7 +2973,8 @@ const CSS = `
 #ui button.snd { width:40px; height:40px; padding:0; border-radius:50%; background:var(--card); color:var(--ink); display:grid; place-items:center; box-shadow:0 2px 10px rgba(20,50,80,.12); flex:none; }
 #ui button.snd svg { width:20px; height:20px; }
 #ui .screen > button.snd { position:absolute; left:max(14px, env(safe-area-inset-left,0px)); top:calc(env(safe-area-inset-top,0px) + 12px); }
-#ui .left-hud { display:flex; gap:8px; align-items:center; }
+#ui .left-hud { display:flex; flex-direction:column; gap:6px; align-items:flex-start; }
+#ui .left-hud .pill { padding:5px 10px; }
 /* 첫 화면: 위에 이름, 아래에 버튼. 가운데는 나르미 얼굴이 보이게 비운다 */
 #ui .title { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:space-between; align-items:center;
   padding:calc(env(safe-area-inset-top,0px) + max(8vh, 72px)) max(16px, env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 18px) max(16px, env(safe-area-inset-left,0px));
@@ -2896,7 +3034,8 @@ export function createUI(opt = {}) {
   const style = document.createElement("style"); style.textContent = CSS; document.head.appendChild(style);
   root.innerHTML = `
     <div class="hud" hidden>
-      <div class="left-hud"><div class="pill"><span class="score">0</span><small>점</small><span class="cargo"></span></div>${sndBtn()}</div>
+      <div class="left-hud">${sndBtn()}<div class="pill"><small>상자</small><span class="cargo"></span></div></div>
+      <div class="sc"><div class="num score">0</div><div class="row"><span class="mult x1">×1</span><span class="pw shield" hidden>💡 0</span><span class="pw magnet" hidden>🧲 0</span></div></div>
       <div class="right"><div class="pill"><small class="sec">아침</small><span class="org"></span></div><div class="bar"><b></b></div></div>
     </div>
     <div class="toast"></div><div class="banner"></div><div class="flash"></div><div class="note"></div><div class="layer"></div>`;
@@ -2919,7 +3058,14 @@ export function createUI(opt = {}) {
 
   const ui = {
     hud(show) { hud.hidden = !show; },
-    setScore(n) { $(".score").textContent = n; },
+    setScore(n) { $(".score").textContent = Math.floor(n).toLocaleString(); },
+    setMult(m, up) { const el = $(".mult"); el.textContent = "×" + m; el.classList.toggle("x1", m <= 1); el.classList.remove("up"); if (up) { void el.offsetWidth; el.classList.add("up"); } },
+    setPower(shield, magnet) {
+      const a = $(".pw.shield"), b = $(".pw.magnet");
+      a.hidden = !(shield > 0); a.textContent = "💡" + Math.ceil(shield);
+      b.hidden = !(magnet > 0); b.textContent = "🧲" + Math.ceil(magnet);
+    },
+    pop(text) { const el = document.createElement("div"); el.className = "pop"; el.textContent = text; $(".sc").appendChild(el); setTimeout(() => el.remove(), 900); },
     setCargo(list) { $(".cargo").innerHTML = list.map(t => `<i class="c-${t}"></i>`).join(""); },
     setSection(name, orgsLeft) { $(".sec").textContent = name; $(".org").textContent = orgsLeft; },
     setProgress(k) { $(".bar b").style.width = (Math.max(0, Math.min(1, k)) * 100).toFixed(1) + "%"; },
@@ -2945,7 +3091,7 @@ export function createUI(opt = {}) {
         <div class="logo"><small>2026 조달청 공공조달 러너</small><h1>나르미의<br>하늘 배송</h1></div>
         <div class="panel"><button class="go">시작하기</button><button class="sub dexb">정책 도감 ${info.dexCount}/${CARDS.length}</button>
         ${info.best ? `<div class="best">최고 기록 <b>${info.best}</b>점</div>` : ""}
-        <div class="hint">폰: 화면을 좌우로 끌기 · PC: ←/→ 키<br>상자를 모아 주황 링을 지나면 배달 완료 · 먹구름과 종이비행기는 피하세요</div></div></div>`;
+        <div class="hint">폰: 화면을 좌우로 끌기 · PC: ←/→ 키<br>상자를 모아 주황 링으로 배달 · 먹구름·종이비행기는 피하기<br>기업 문은 알맞은 값으로! 너무 싸면 부실, 같은 값 둘은 담합</div></div></div>`;
       const c = layer.firstElementChild;
       on(c, ".go", () => { layer.innerHTML = ""; onGo(); });
       on(c, ".dexb", onDex);
@@ -3024,7 +3170,7 @@ export function createUI(opt = {}) {
           <div><b class="cnt">0</b><span>점수</span></div>
           <div><b>${r.delivered}/${r.rings}</b><span>배달한 기관</span></div>
           <div><b>${r.innov}</b><span>혁신제품 배달</span></div>
-          <div><b>${r.boxes}</b><span>모은 상자</span></div>
+          <div><b>${r.gates}/${r.gateTotal}</b><span>좋은 기업 문</span></div>
         </div>
         ${r.seen.length ? `<h2 style="margin-bottom:8px">이번 판에 본 조달 상식 ${r.seen.length}장${r.fresh.length ? ` · 도감에 새로 ${r.fresh.length}장` : ""}</h2>
         <div class="chips">${r.seen.map(c => `<span class="${r.fresh.includes(c.id) ? "new" : ""}">${esc(c.title)}</span>`).join("")}</div>` : ""}
