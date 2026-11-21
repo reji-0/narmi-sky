@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-21T15:27:33.990Z">
+<meta name="build" content="2026-11-21T16:35:23.354Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -3171,7 +3171,7 @@ export function createUI(opt = {}) {
       toast.classList.remove("show"); toastT = 0;
       const POS = ["왼쪽", "가운데", "오른쪽"], N = ["①", "②", "③"];
       const c = screen(`<div class="card gcard" style="box-shadow:none;padding:0;width:auto"><span class="who">달이</span>
-        <div class="org">${esc(sc.org)}</div><h3>${esc(sc.need)}이 필요해요</h3><div class="ctx">${esc(sc.ctx)}</div>
+        <div class="org">${esc(sc.org)}</div><h3>${esc(sc.need)}가 필요해요</h3><div class="ctx">${esc(sc.ctx)}</div>
         <div class="gopts">${gates.map((g, i) => `<div class="gopt"><span class="n">${N[i]}<small>${POS[i]} 문</small></span><b>${esc(g.sign)}</b><span class="d">${esc(g.desc)}</span></div>`).join("")}</div>
         <div class="gkey">어느 문으로 갈지 정했으면 출발! <b>PC</b> ← → 키 · <b>폰</b> 좌우로 끌어서 그 문으로 지나가요</div>
         <button class="go">출발!</button></div>`, "low");
