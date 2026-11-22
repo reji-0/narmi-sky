@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-21T16:42:50.641Z">
+<meta name="build" content="2026-11-22T07:25:34.139Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -1893,6 +1893,7 @@ export function createLearn() {
     see,
     // 내용을 읽을 시간이 있었던 카드로 표시
     read(id) { read.add(id); return see(id); },
+    isRead: id => read.has(id),
     // 주제의 다음 카드(한 판에서 같은 주제 카드를 돌아가며 보여 준다)
     line(topic) {
       const list = CARDS.filter(c => c.topic === topic);
@@ -2092,6 +2093,7 @@ const PICK = { box: 50, sme: 50, innov: 100 };
 const RING_PTS = 200, CARGO_PTS = 50, GATE_PTS = 300, MULT_MAX = 5;
 const SHIELD_T = 8, MAGNET_T = 6;               // 혁신제품 문 = 방패, 중소기업 상자 3개 = 자석 (초)
 const CAPTION_GAP = 4.0;                       // 상식 자막 사이 최소 간격(초)
+const FACT_GAP = 8;                            // 상식 카드로 멈추는 최소 간격(초)
 const BEST_KEY = "narmi-best-v2"; // 점수 체계가 바뀌어 새로 센다
 const LABEL = { box: "조달 상자", innov: "혁신제품 상자", sme: "중소기업 상자", cloud: "담합 먹구름을 피했어요", plane: "위조 서류를 피했어요" };
 
@@ -2142,7 +2144,7 @@ function startGame() {
 
   // state: title · brief · play · crash · quiz · result
   const game = { state: "title", t: 0, slow: 1, score: 0, mult: 1, shield: 0, magnet: 0, gatesGood: 0, asked: new Set(), planeWarn: new Set(), cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1,
-    done: new Set(), endT: 0, revived: false, capT: 0, breakShown: new Set(), lastHit: null, bullet: 0, bk: 1, night: 0, rideT: -1, rideOut: -1 };
+    done: new Set(), endT: 0, revived: false, capT: 0, breakShown: new Set(), lastHit: null, lastFact: -99, bullet: 0, bk: 1, night: 0, rideT: -1, rideOut: -1 };
   const drops = [];
   const objects = createObjects(scene, course, onEvent, { magnet: () => game.magnet > 0 });
   // 방패: 나르미를 감싸는 금빛 거품
@@ -2161,10 +2163,26 @@ function startGame() {
   const input = createInput(r => game.state === "play" && player.drag(r));
 
   function caption(type, extra = "") {
+    if (game.state !== "play") return; // 카드가 떠 있을 때는 자막을 띄우지 않는다
     // 피하는 중에는 긴 문장을 못 읽으므로 카드 제목만. 내용은 쉬는 시간·결과·도감에서 읽는다.
     const card = learn.line(TOPIC_OF[type]);
     ui.toast(`<b>${extra || LABEL[type]}</b><br><span class="cardget">상식 카드 · ${card.title}</span>`, 2.0, true);
     game.capT = CAPTION_GAP;
+  }
+
+  // 상자를 먹었을 때: 이번 판에 아직 못 읽은 상식 카드면 잠깐 멈추고 가운데 카드로 보여 준다(부활 퀴즈 후보가 됨).
+  // 이미 읽은 카드이거나 방금 멈췄으면 한 줄 자막만.
+  function factOrCaption(type) {
+    if (game.capT > 0) return;
+    const card = learn.line(TOPIC_OF[type]);
+    if (learn.isRead(card.id) || game.t - game.lastFact < FACT_GAP) {
+      ui.toast(`<b>${LABEL[type]}</b><br><span class="cardget">상식 카드 · ${card.title}</span>`, 2.0, true);
+      game.capT = CAPTION_GAP; return;
+    }
+    learn.read(card.id); game.lastFact = game.t;
+    game.state = "fact"; daliShow(true); ui.warn(0); sfx.note();
+    ui.factCard(card, LABEL[type], () => { daliShow(false); game.state = "play"; game.capT = CAPTION_GAP; player.setTarget(player.x); });
+    if (auto) setTimeout(() => ui._factGo?.(), 300);
   }
 
   function onEvent(kind, it, gate) {
@@ -2190,7 +2208,7 @@ function startGame() {
       sfx.pick(it.type); fx.pick(player.x, it.type);
       addPts(PICK[it.type]); flashPick(it.type);
       if (it.type === "sme") countSme();
-      else if (game.capT <= 0) caption(it.type);
+      else factOrCaption(it.type);
     } else if (kind === "pass") {
       if (Math.abs(it.x - player.x) < 3.2) sfx.whoosh();
       if (game.capT <= 0) caption(it.type);
@@ -2222,7 +2240,7 @@ function startGame() {
   }
   // 중소기업 상자 3개마다 자석
   function countSme(quiet) {
-    if (++game.sme % 3) { if (!quiet && game.capT <= 0) caption("sme"); return; }
+    if (++game.sme % 3) { if (!quiet) factOrCaption("sme"); return; }
     game.magnet = MAGNET_T; sfx.ring();
     ui.toast(`<b>🌱 중소기업 상자 3개 · 자석 ${MAGNET_T}초!</b>`, 1.8, true); game.capT = CAPTION_GAP;
   }
@@ -2230,7 +2248,7 @@ function startGame() {
   function reset() {
     objects.reset(); player.reset(); learn.reset(); ui.clear();
     Object.assign(game, { t: 0, slow: 1, score: 0, mult: 1, shield: 0, magnet: 0, gatesGood: 0, asked: new Set(), planeWarn: new Set(), cargo: [], boxes: 0, sme: 0, delivered: 0, innov: 0, section: -1,
-      done: new Set(), endT: 0, revived: false, capT: 0, breakShown: new Set(), lastHit: null, bullet: 0, bk: 1, night: 0, rideT: -1, rideOut: -1 });
+      done: new Set(), endT: 0, revived: false, capT: 0, breakShown: new Set(), lastHit: null, lastFact: -99, bullet: 0, bk: 1, night: 0, rideT: -1, rideOut: -1 });
     ride.visible = false;
     fx.clear();
     ui.setScore(0); ui.setCargo([]); ui.setMult(1); ui.setPower(0, 0);
@@ -2371,11 +2389,11 @@ function startGame() {
   const RIG = {
     follow: () => ({ ang: 0, dist: 7, h: 3, aim: 0, sx: 0, sy: 0, lx: 0 }),
     // 달이 타임: 앞쪽 비스듬히에서 나르미와 달이 얼굴이 함께 보이게 (카드가 가리지 않게 그림을 위·왼쪽으로)
-    dali: () => portrait() ? { ang: 2.55, dist: 7.6, h: 0.6, aim: 1, sx: 0, sy: 0.2, lx: 1.05 } : { ang: 2.55, dist: 6.6, h: 0.5, aim: 1, sx: 0.2, sy: 0.04, lx: 1.05 },
+    dali: () => portrait() ? { ang: 2.55, dist: 7.6, h: 0.6, aim: 1, sx: 0, sy: 0.2, lx: 1.05 } : { ang: 2.55, dist: 8.6, h: 0.5, aim: 1, sx: 0.36, sy: 0.04, lx: 1.05 },
     deliver: () => ({ ang: 0.28, dist: 6.4, h: 2.4, aim: 0.25, sx: 0, sy: 0 }),
     crash: () => ({ ang: 0.7, dist: 6.5, h: 2.4, aim: 0.7, sx: 0, sy: 0 }),
-    title: () => portrait() ? { ang: 2.7, dist: 5.6, h: 0.3, aim: 1, sx: 0, sy: 0.02 } : { ang: 2.75, dist: 5.2, h: 0.3, aim: 1, sx: -0.2, sy: 0 },
-    result: () => portrait() ? { ang: 2.85, dist: 5.4, h: 0.6, aim: 1, sx: 0, sy: 0.33 } : { ang: 2.6, dist: 5.2, h: 0.4, aim: 1, sx: 0.22, sy: 0 },
+    title: () => portrait() ? { ang: 2.7, dist: 5.6, h: 0.3, aim: 1, sx: 0, sy: 0.02 } : { ang: 2.75, dist: 6.4, h: 0.3, aim: 1, sx: 0, sy: -0.11 },
+    result: () => portrait() ? { ang: 2.85, dist: 5.4, h: 0.6, aim: 1, sx: 0, sy: 0.33 } : { ang: 2.6, dist: 6.6, h: 0.4, aim: 1, sx: 0.36, sy: 0 },
   };
   const cam = { ang: 2.7, dist: 5.6, h: 0.3, aim: 1, sx: 0, sy: 0, lx: 0, shake: 0, punch: 0, fov: 58 };
   const far = new THREE.Vector3(), near = new THREE.Vector3();
@@ -2461,7 +2479,7 @@ function startGame() {
       objects.update(game.t, gdt, player.x, () => game.state === "play" && player.st.inv <= 0);
       world.setTime(q.has("phase") ? +q.get("phase") : phaseAt(game.t));
       if (game.state === "play" && game.t >= TOTAL) finish(true);
-    } else if (st === "ask" || st === "reveal") { // 기업 문 카드: 시계를 멈추고 제자리에서 날갯짓
+    } else if (st === "ask" || st === "reveal" || st === "fact") { // 기업 문 카드: 시계를 멈추고 제자리에서 날갯짓
       speed = 0;
     } else if (st === "dali") { // 달이 타임: 시계를 멈추고 천천히 날기만
       speed = 9;
@@ -3009,7 +3027,7 @@ const CSS = `
 #ui .note h3, #ui .card h3 { margin:2px 0 4px; font-size:17px; }
 #ui .note p, #ui .card p { margin:0; line-height:1.55; color:#33434f; font-size:15px; }
 #ui .screen { position:absolute; inset:0; display:grid; place-items:center; padding:20px; background:rgba(16,40,64,.28); overflow:auto; }
-#ui .screen.low { place-items:end center; background:linear-gradient(rgba(16,40,64,0) 30%, rgba(16,40,64,.35)); padding-bottom:calc(env(safe-area-inset-bottom,0px) + 18px); }
+#ui .screen.low { place-items:center; background:rgba(16,40,64,.24); }
 #ui .card { background:#fff; border-radius:22px; padding:24px 22px 20px; width:min(92vw,400px); box-shadow:0 12px 40px rgba(10,30,50,.3); text-align:center; }
 #ui .card.left { text-align:left; }
 #ui .card h1 { margin:0 0 6px; font-size:26px; letter-spacing:-.5px; }
@@ -3061,8 +3079,8 @@ const CSS = `
 @keyframes drop { from { opacity:0; transform:translateY(-24px) scale(.92); } }
 @keyframes rise { from { opacity:0; transform:translateY(24px); } }
 @keyframes stamp { 0% { opacity:0; transform:scale(2.8) rotate(-16deg); } 70% { opacity:1; transform:scale(.92) rotate(3deg); } 100% { transform:none; } }
-/* 결과: 세로 화면은 아래, 가로 화면은 오른쪽 (나르미 얼굴 자리를 비운다) */
-#ui .screen.res { place-items:end center; background:linear-gradient(rgba(16,40,64,0) 25%, rgba(16,40,64,.3)); padding-bottom:calc(env(safe-area-inset-bottom,0px) + 16px); }
+/* 결과·정보 카드: 화면 가운데 */
+#ui .screen.res { place-items:center; background:rgba(16,40,64,.22); }
 #ui .grade { animation:stamp .55s .25s both; }
 #ui .gline { font-weight:800; margin:4px 0 0; }
 #ui .newbest { display:inline-block; background:var(--tan); color:#fff; border-radius:999px; padding:3px 10px; font-size:12px; font-weight:800; margin-top:6px; animation:rise .4s .9s both; }
@@ -3097,16 +3115,17 @@ const CSS = `
 @media (min-width: 1000px) and (min-height: 640px) { #ui .screen > .card { zoom:1.4; } }
 @media (min-width: 1400px) and (min-height: 880px) { #ui .screen > .card { zoom:1.75; } }
 #ui .screen > .card:has(.gcard) { width:min(92vw,520px); }
+/* 결과 카드도 길어서 화면 높이에 맞춘다 */
+@media (min-width: 1000px) and (min-height: 640px) { #ui .screen.res > .card { zoom:1.05; } }
+@media (min-width: 1000px) and (min-height: 860px) { #ui .screen.res > .card { zoom:1.3; } }
+@media (min-width: 1400px) and (min-height: 1000px) { #ui .screen.res > .card { zoom:1.5; } }
 /* 정답 카드는 길어서 화면 높이에 맞춰 덜 키운다 */
 @media (min-width: 1000px) and (min-height: 640px) { #ui .screen > .card:has(.gr) { zoom:1.2; } }
 @media (min-width: 1000px) and (min-height: 780px) { #ui .screen > .card:has(.gr) { zoom:1.4; } }
 @media (min-width: 1400px) and (min-height: 960px) { #ui .screen > .card:has(.gr) { zoom:1.65; } }
 @media (min-aspect-ratio: 1/1) {
-  #ui .title { align-items:flex-start; padding-top:calc(env(safe-area-inset-top,0px) + 66px); padding-left:max(6vw, env(safe-area-inset-left,0px)); }
-  #ui .logo { text-align:left; }
+  #ui .title { padding-top:calc(env(safe-area-inset-top,0px) + 66px); }
   #ui .logo h1 { font-size:clamp(40px, 10vh, 76px); }
-  /* 가로 화면: 정보 카드는 가운데(달이는 카드 왼쪽에 선다) */
-  #ui .screen.res, #ui .screen.low { place-items:center; padding-left:max(18vw, env(safe-area-inset-left,0px)); background:rgba(16,40,64,.22); }
 }
 /* 가로로 눕힌 폰처럼 낮은 화면: 카드를 줄인다 */
 @media (max-height: 520px) {
@@ -3205,6 +3224,20 @@ export function createUI(opt = {}) {
       };
       addEventListener("keydown", onKey);
       ui._gateClose = close;
+    },
+    // 상자에서 나온 상식 카드: 게임을 멈추고 가운데에 크게. 부활 퀴즈에 쓰인다고 알려 준다.
+    factCard(card, from, onGo) {
+      toast.classList.remove("show"); toastT = 0;
+      const c = screen(`<div class="card gcard gq" style="box-shadow:none;padding:0;width:auto"><span class="who">상식 카드 획득!</span>
+        <div class="org">${esc(from)}에서 나왔어요 · ${esc(TOPIC_NAME[card.topic])}</div><h3>${esc(card.title)}</h3><p class="ctx">${esc(card.more)}</p>
+        <div class="gonce">💡 꼭 기억해 둬! 쓰러지면 달이가 이 내용으로 퀴즈를 내. 맞히면 그 자리에서 다시 날 수 있어.</div>
+        <button class="go">기억했어요! 계속 날기</button></div>`, "low");
+      let done = false, ready = false;
+      setTimeout(() => (ready = true), 350);
+      const go = () => { if (done) return; done = true; removeEventListener("keydown", onKey); layer.innerHTML = ""; onGo(); };
+      const onKey = e => { if (ready && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); S("click"); go(); } };
+      addEventListener("keydown", onKey);
+      on(c, ".go", go); ui._factGo = go;
     },
     // 문을 지난 뒤: 정답인지, 정답 문과 이유
     gateReveal({ sc, gates, picked, right, pts, shield }, onGo) {
