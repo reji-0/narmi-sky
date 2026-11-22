@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-22T07:25:34.139Z">
+<meta name="build" content="2026-11-22T07:30:19.367Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -1630,6 +1630,11 @@ export const CARDS = [
     more: "다수공급자계약은 조달청이 품질·성능이 비슷한 여러 업체와 미리 단가계약을 맺는 제도예요. 기관은 나라장터 쇼핑몰에서 골라 사요.",
     q: { ask: "다수공급자계약(MAS)은 어떤 제도일까요?", answer: "여러 업체와 미리 계약해 두고 기관이 골라 사는 제도", wrong: ["한 업체에게만 모든 물건을 사는 제도", "외국 제품만 사는 제도", "추첨으로 물건을 나눠 주는 제도"] }, src: [6] },
 
+  { id: "naraj-koneps", topic: "naraj", title: "영어 이름 KONEPS",
+    line: "나라장터의 영어 이름은 KONEPS예요",
+    more: "나라장터는 영어로 KONEPS(Korea ON-line E-Procurement System)라고 불러요. 한국의 온라인 전자조달시스템이라는 뜻이에요.",
+    q: { ask: "나라장터의 영어 이름은 무엇일까요?", answer: "KONEPS", wrong: ["K-MARKET", "NARA-SHOP", "G-STORE"] }, src: [19] },
+
   { id: "innov-pilot", topic: "innov", title: "혁신제품 시범구매",
     line: "혁신제품은 조달청이 먼저 사서 공공기관이 써 보게 해요",
     more: "새로 나온 혁신제품은 팔 곳을 찾기 어려워요. 그래서 조달청이 첫 구매자가 되어 사고, 공공기관이 직접 써 보게 해요. 2019년에 시작했어요.",
@@ -1660,6 +1665,11 @@ export const CARDS = [
     more: "조달청은 기술·품질이 뛰어난 중소·벤처기업 제품을 우수조달물품으로 지정해요. 지정되면 수의계약으로 공공기관에 팔 수 있어요.",
     q: { ask: "기술·품질이 뛰어난 제품을 지정하는 조달청 제도는?", answer: "우수조달물품 지정", wrong: ["올해의 상품 투표", "베스트셀러 인증", "명품 마크"] }, src: [12] },
 
+  { id: "sme-excellent-3yr", topic: "sme", title: "우수제품은 3년 + 연장",
+    line: "우수조달물품 지정은 기본 3년이고, 요건을 채우면 최대 3년 더 늘어나요",
+    more: "우수조달물품으로 지정되면 기본 3년 동안 수의계약으로 공공기관에 팔 수 있어요. 기술개발·고용 같은 요건을 채우면 최대 3년까지 연장돼요.",
+    q: { ask: "우수조달물품의 기본 지정 기간은?", answer: "3년", wrong: ["3개월", "1년", "10년"] }, src: [12, 20] },
+
   { id: "fair-what", topic: "fair", title: "입찰 담합",
     line: "입찰 담합은 업체끼리 미리 짜고 낙찰자나 가격을 정하는 것이에요",
     more: "입찰 담합은 경쟁해야 할 업체들이 몰래 짜고 누가 낙찰받을지, 얼마에 낼지 정하는 거예요. 공정거래법이 금지해요.",
@@ -1682,6 +1692,92 @@ export const CARDS = [
     more: "입찰 참가자격 제한을 받으면 처분한 기관뿐 아니라 다른 국가기관·지방자치단체·공기업 입찰에도 참가할 수 없어요.",
     q: { ask: "입찰 참가자격 제한을 받으면 어디 입찰에 못 나갈까요?", answer: "다른 공공기관 입찰까지 모두", wrong: ["처분한 기관 한 곳만", "민간 회사 입찰만", "해외 입찰만"] }, src: [16, 18] },
 ];
+
+// 같은 카드를 다른 방식으로 묻는 문제 (판마다 무작위). 내용은 카드의 more·출처 범위 안에서만.
+const MORE_Q = {
+  "pps-role": [
+    { ask: "학교 책걸상이나 도로 공사 계약처럼 공공기관에 필요한 것을 맡아 사 주는 곳은?", answer: "조달청", wrong: ["기상청", "국세청", "우체국"] },
+    { ask: "조달청이 맡지 않는 일은 무엇일까요?", answer: "날씨 예보", wrong: ["공공기관 물품 구매", "시설공사 계약", "공공기관 대신 계약하기"] },
+  ],
+  "pps-daejeon": [
+    { ask: "조달청이 1998년에 옮겨 간 곳은?", answer: "정부대전청사", wrong: ["정부서울청사", "정부세종청사", "부산시청"] },
+    { ask: "조달청이 대전으로 옮긴 해는?", answer: "1998년", wrong: ["1961년", "2002년", "2019년"] },
+  ],
+  "pps-1961": [
+    { ask: "조달청의 뿌리가 된 1949년의 기관은?", answer: "임시외자총국", wrong: ["나라장터", "벤처나라", "공정거래위원회"] },
+    { ask: "1961년에 생긴 기관은?", answer: "조달청", wrong: ["나라장터", "혁신장터", "벤처나라"] },
+  ],
+  "pps-scale": [
+    { ask: "2025년 공공조달 규모는 이전과 비교하면 어땠을까요?", answer: "역대 가장 많았다", wrong: ["역대 가장 적었다", "10년째 똑같았다", "절반으로 줄었다"] },
+    { ask: "공공조달 238.5조 원은 몇 년의 규모일까요?", answer: "2025년", wrong: ["1961년", "2002년", "2016년"] },
+  ],
+  "naraj-what": [
+    { ask: "나라장터에서 온라인으로 할 수 없는 것은?", answer: "농산물 경매 구경", wrong: ["입찰 공고 보기", "입찰 참여", "대금 지급"] },
+    { ask: "입찰부터 계약·대금 지급까지 온라인으로 처리하는 시스템은?", answer: "나라장터", wrong: ["벤처나라", "혁신장터", "정부24"] },
+  ],
+  "naraj-2002": [
+    { ask: "나라장터가 생기기 전에는 조달 업무를 어떻게 했을까요?", answer: "종이 서류로", wrong: ["스마트폰 앱으로", "인공지능으로", "텔레비전 방송으로"] },
+    { ask: "2002년에 문을 연 국가종합전자조달시스템은?", answer: "나라장터", wrong: ["벤처나라", "혁신장터", "공정거래 신고센터"] },
+  ],
+  "naraj-share": [
+    { ask: "2025년 나라장터에서 거래된 금액은 약 얼마일까요?", answer: "약 145.8조 원", wrong: ["약 1.5조 원", "약 14.6조 원", "약 1,458조 원"] },
+    { ask: "2025년 공공조달 가운데 나라장터를 거친 몫은?", answer: "절반이 넘는다", wrong: ["10분의 1도 안 된다", "4분의 1쯤이다", "하나도 없다"] },
+  ],
+  "naraj-mas": [
+    { ask: "다수공급자계약에서 기관은 어디서 제품을 골라 살까요?", answer: "나라장터 쇼핑몰", wrong: ["동네 문구점", "해외 직구 사이트", "중고 장터"] },
+    { ask: "다수공급자계약은 어떤 업체들과 미리 계약할까요?", answer: "품질·성능이 비슷한 여러 업체", wrong: ["가장 큰 업체 한 곳", "외국 업체만", "추첨으로 뽑힌 한 곳"] },
+  ],
+  "naraj-koneps": [
+    { ask: "KONEPS는 무엇의 영어 이름일까요?", answer: "나라장터", wrong: ["조달청 건물", "혁신장터", "벤처나라"] },
+  ],
+  "innov-pilot": [
+    { ask: "혁신제품 시범구매에서 조달청의 역할은?", answer: "첫 구매자", wrong: ["제품을 만드는 공장", "제품을 파는 가게", "제품 광고 모델"] },
+    { ask: "혁신제품 시범구매가 시작된 해는?", answer: "2019년", wrong: ["1961년", "2002년", "2016년"] },
+  ],
+  "innov-3yr": [
+    { ask: "혁신제품으로 지정되면 3년 동안 어떻게 살 수 있을까요?", answer: "경쟁입찰 없이 수의계약으로", wrong: ["추첨으로만", "해외에서만", "살 수 없다"] },
+  ],
+  "innov-market": [
+    { ask: "공공기관이 혁신제품을 찾아 사는 전용몰은?", answer: "혁신장터", wrong: ["나라장터 해외관", "벤처나라", "동네 시장"] },
+    { ask: "혁신장터에는 어떤 제품이 올라갈까요?", answer: "지정된 혁신제품", wrong: ["중고 제품", "외국 기념품", "농산물"] },
+  ],
+  "innov-testbed": [
+    { ask: "시범구매한 혁신제품을 써 본 공공기관은 무엇을 할까요?", answer: "써 본 결과를 나눈다", wrong: ["제품을 되판다", "제품을 숨긴다", "제품을 새로 만든다"] },
+    { ask: "공공기관이 혁신제품을 먼저 써 보는 것을 무엇이라 부를까요?", answer: "테스트베드", wrong: ["쇼룸", "물류창고", "박물관"] },
+  ],
+  "sme-50": [
+    { ask: "공공기관이 중소기업 제품을 일정 비율 이상 사야 하는 까닭은?", answer: "중소기업의 판로를 넓히려고", wrong: ["물건값을 올리려고", "외국 제품을 늘리려고", "세금을 더 걷으려고"] },
+    { ask: "공공기관이 1억 원어치를 산다면, 중소기업 제품은 최소 얼마?", answer: "5천만 원 이상", wrong: ["5백만 원 이상", "1천만 원 이상", "정해진 금액 없음"] },
+  ],
+  "sme-venture": [
+    { ask: "벤처나라가 문을 연 해는?", answer: "2016년", wrong: ["1961년", "2002년", "2019년"] },
+    { ask: "벤처나라는 어떤 기업의 제품을 파는 곳일까요?", answer: "창업·벤처기업", wrong: ["외국 대기업", "공기업", "개인 중고 판매자"] },
+  ],
+  "sme-excellent": [
+    { ask: "우수조달물품으로 지정되면 공공기관에 어떻게 팔 수 있을까요?", answer: "수의계약으로", wrong: ["추첨으로만", "경매로만", "팔 수 없다"] },
+  ],
+  "sme-excellent-3yr": [
+    { ask: "우수조달물품 지정은 요건을 채우면 최대 몇 년 더 늘어날까요?", answer: "3년", wrong: ["1개월", "10년", "늘어나지 않는다"] },
+  ],
+  "fair-what": [
+    { ask: "입찰 담합을 금지하는 법은?", answer: "공정거래법", wrong: ["도로교통법", "식품위생법", "저작권법"] },
+    { ask: "이름이 비슷한 두 회사가 똑같이 비싼 값을 써 냈다면 무엇을 의심해야 할까요?", answer: "입찰 담합", wrong: ["우수조달물품", "혁신제품", "다수공급자계약"] },
+  ],
+  "fair-brias": [
+    { ask: "입찰담합 징후분석 시스템을 운영하는 곳은?", answer: "공정거래위원회", wrong: ["기상청", "국세청", "통계청"] },
+    { ask: "입찰담합 징후분석 시스템은 무엇을 분석할까요?", answer: "공공입찰 자료", wrong: ["날씨 자료", "교통 사고 자료", "영화 관객 수"] },
+  ],
+  "fair-limit": [
+    { ask: "담합한 업체가 받을 수 있는 벌이 아닌 것은?", answer: "우수조달물품 지정", wrong: ["과징금", "공공입찰 참가자격 제한", "제재 처분"] },
+  ],
+  "sanction-forge": [
+    { ask: "입찰 서류를 위조하거나 거짓으로 낸 업체를 무엇이라 할까요?", answer: "부정당업자", wrong: ["우수업체", "혁신기업", "다수공급자"] },
+  ],
+  "sanction-all": [
+    { ask: "한 기관에서 입찰 참가자격 제한을 받은 업체는 지방자치단체 입찰에 나갈 수 있을까요?", answer: "못 나간다", wrong: ["언제나 나갈 수 있다", "돈을 더 내면 나간다", "그 기관만 빼고 나간다"] },
+  ],
+};
+CARDS.forEach(c => { c.qs = [c.q, ...(MORE_Q[c.id] || [])]; });
 
 export const BY_ID = Object.fromEntries(CARDS.map(c => [c.id, c]));
 
@@ -1784,6 +1880,7 @@ export function createFx(scene) {
 </script>
 <script type="text/plain" data-mod="./gates.js">// 기업 문 상황 6개: 구간마다 두 번. 문 앞에서 멈추고, 달이가 "어디서 무엇을 왜" 필요한지와 문 셋의 물품을 보여 준다.
 // 가격만이 아니라 쓰임새·내구성·안전 인증·중소기업·혁신제품·담합을 따져 고르게 한다.
+// 자리마다 상황이 두 가지씩 있어 판마다 무작위로 고른다(pickScenes). 2번·3번 자리는 짝(같은 물건, 다른 곳)이라 함께 고른다.
 // ok = 정답, tag: sme(중소기업 상자로 셈) · innov(방패). 기업 이름은 모두 지어낸 이름.
 // 제도 설명의 출처는 docs/퀴즈_출처.md 번호(src).
 export const SCENES = [
@@ -1830,6 +1927,58 @@ export const SCENES = [
     ],
     why: "이름이 비슷한 두 곳이 똑같이 비싼 값을 써 냈어. 몰래 짜고 값을 올리는 입찰 담합이야. 법으로 금지돼 있고, 걸리면 최대 2년까지 공공입찰에 못 나와." },
 ];
+
+// 두 번째 세트: 자리마다 같은 원리(쓰임새·안전 인증·쓰는 곳·중소기업·혁신제품·담합)를 다른 물건으로
+export const SCENES_B = [
+  { org: "🏫 한빛초등학교", need: "체육용 축구공 20개", ctx: "체육 시간마다 운동장에서 힘껏 차요.", topic: "naraj",
+    opts: [
+      { sign: "비닐 장난감 공", desc: "가장 싸요 · 세게 차면 터져요" },
+      { sign: "학교 체육용 축구공", desc: "튼튼한 가죽 · 알맞은 값", ok: true },
+      { sign: "선수 사인 기념공", desc: "장식장에 두는 공 · 아주 비싸요" },
+    ],
+    why: "매일 세게 차니 튼튼한 체육용 공이 알맞아. 싼 공은 금방 터져 다시 사야 하고, 기념공은 비싸고 차라고 만든 공이 아니야." },
+  { org: "🚒 푸른소방서", need: "안전모 30개", ctx: "불난 건물 안으로 들어갈 때 머리를 지켜요.", topic: "pps",
+    opts: [
+      { sign: "자전거 헬멧", desc: "가볍고 싸요 · 열에 녹아요" },
+      { sign: "소방용 안전모", desc: "열과 충격을 막는 인증 제품 · 비싸요", ok: true },
+      { sign: "야구 모자", desc: "가장 싸요 · 머리를 못 지켜요" },
+    ],
+    why: "소방관의 안전이 걸린 물건은 쓰임새에 맞는 인증 제품이어야 해. 싸다고 고르면 사람이 다칠 수 있어." },
+  { org: "🏫 한빛초등학교", need: "자전거 교실 헬멧 30개", ctx: "운동장에서 자전거 타기를 배워요.", topic: "naraj",
+    opts: [
+      { sign: "소방용 안전모", desc: "불에 강한 소방용 · 무겁고 아주 비싸요" },
+      { sign: "어린이 자전거 헬멧", desc: "가볍고 머리에 꼭 맞아요 · 알맞은 값", ok: true },
+      { sign: "야구 모자", desc: "가장 싸요 · 넘어지면 머리를 못 지켜요" },
+    ],
+    why: "소방서에선 소방용 안전모가 정답이었지만 자전거 교실엔 너무 무겁고 비싸. 같은 안전모도 어디서 무엇에 쓰는지에 따라 정답이 달라져." },
+  { org: "🏥 햇살보건소", need: "진료실 책상 4개", ctx: "성능과 값이 똑같은 제품이 둘 있어요.", topic: "sme", src: [10],
+    opts: [
+      { sign: "대기업 책상", desc: "품질 인증 ✓ · 1개 40만원" },
+      { sign: "🌱 중소기업 책상", desc: "품질 인증 ✓ · 1개 40만원", ok: true, tag: "sme" },
+      { sign: "인증 없는 직구 책상", desc: "인증 없음 · 1개 30만원 · 고치기 어려워요" },
+    ],
+    why: "성능과 값이 같다면 중소기업 제품을 먼저! 공공기관은 구매액의 50% 이상을 중소기업 제품으로 사야 해. 인증 없는 제품은 품질을 믿기 어려워." },
+  { org: "🏥 햇살보건소", need: "백신 보관 냉장고 2대", ctx: "정전이 되면 백신이 상할까 걱정이에요.", topic: "innov", src: [8],
+    opts: [
+      { sign: "가정용 냉장고", desc: "싸요 · 온도가 오르내려요" },
+      { sign: "💡 정전 알림 의료용 냉장고", desc: "혁신제품 · 온도를 지키고 정전되면 바로 알려요", ok: true, tag: "innov" },
+      { sign: "캠핑용 아이스박스", desc: "가장 싸요 · 몇 시간만 시원해요" },
+    ],
+    why: "새로 나온 혁신제품은 조달청이 첫 구매자가 돼서 공공기관이 먼저 써 보게 해. 보건소는 백신을 지키고, 좋은 기술을 가진 기업도 클 수 있어." },
+  { org: "🏫 한빛초등학교", need: "교실 TV 10대", ctx: "세 회사가 값을 써 냈어요. 수상한 점은 없나요?", topic: "fair", src: [13],
+    opts: [
+      { sign: "새빛전자", desc: "1대 210만원" },
+      { sign: "새빛전자유통", desc: "1대 210만원" },
+      { sign: "늘봄디지털", desc: "1대 178만원", ok: true },
+    ],
+    why: "이름이 비슷한 두 곳이 똑같이 비싼 값을 써 냈어. 몰래 짜고 값을 올리는 입찰 담합이야. 법으로 금지돼 있고, 걸리면 최대 2년까지 공공입찰에 못 나와." },
+];
+
+// 이번 판의 문 상황 6개. 자리마다 두 세트 중 하나, 2·3번 자리는 같은 세트(소방서 → 학교 짝).
+export function pickScenes(rand = Math.random) {
+  const pair = rand() < 0.5 ? SCENES : SCENES_B;
+  return SCENES.map((a, i) => (i === 1 || i === 2 ? pair[i] : rand() < 0.5 ? a : SCENES_B[i]));
+}
 </script>
 <script type="text/plain" data-mod="./input.js">// 입력: 자유 이동. 폰은 손가락을 끄는 만큼 따라오고, PC는 ←/→, A/D를 누르고 있는 동안 움직인다.
 // onDrag(비율): 화면 너비 대비 이번에 끈 거리. axis(): 키보드 방향(-1, 0, 1).
@@ -1897,7 +2046,7 @@ export function createLearn() {
     // 주제의 다음 카드(한 판에서 같은 주제 카드를 돌아가며 보여 준다)
     line(topic) {
       const list = CARDS.filter(c => c.topic === topic);
-      const i = (cursor[topic] = ((cursor[topic] ?? -1) + 1) % list.length);
+      const i = (cursor[topic] = ((cursor[topic] ?? Math.floor(Math.random() * list.length)) + 1) % list.length); // 판마다 다른 카드부터
       return see(list[i].id);
     },
     // 구간 사이 정리: 이번 판에 가장 많이 본 카드 중 아직 정리 안 한 것
@@ -1919,8 +2068,9 @@ export function createLearn() {
       // 여러 번 본 카드일수록 먼저
       from.sort((a, b) => (shown.get(b.id) || 0) - (shown.get(a.id) || 0));
       const card = from[Math.floor(Math.random() * Math.min(2, from.length))];
-      const opts = [card.q.answer, ...card.q.wrong].sort(() => Math.random() - 0.5);
-      return { card, ask: card.q.ask, opts, answer: opts.indexOf(card.q.answer) };
+      const q = card.qs[Math.floor(Math.random() * card.qs.length)]; // 같은 카드도 묻는 방식이 판마다 다르다
+      const opts = [q.answer, ...q.wrong].sort(() => Math.random() - 0.5);
+      return { card, ask: q.ask, opts, answer: opts.indexOf(q.answer) };
     },
     get seenCards() { return order.map(id => BY_ID[id]); },
     get freshIds() { return fresh.slice(); },
@@ -2073,7 +2223,8 @@ import { createUI } from "./ui.js";
 import { createLearn } from "./learn.js";
 import { CARDS, TOPIC_OF } from "./facts.js";
 import { createDali, animateDali } from "./characters.js";
-import { buildCourse, SECTIONS, TOTAL, speedAt, phaseAt, sectionAt, SLOTS } from "./level.js";
+import { pickScenes } from "./gates.js";
+import { buildCourse, GATE_X, SECTIONS, TOTAL, speedAt, phaseAt, sectionAt, SLOTS } from "./level.js";
 import { createObjects, dropBox, ORG_NAMES } from "./objects.js";
 import { createAudio } from "./audio.js";
 import { createFx } from "./fx.js";
@@ -2251,6 +2402,12 @@ function startGame() {
       done: new Set(), endT: 0, revived: false, capT: 0, breakShown: new Set(), lastHit: null, lastFact: -99, bullet: 0, bk: 1, night: 0, rideT: -1, rideOut: -1 });
     ride.visible = false;
     fx.clear();
+    // 판마다 문 상황을 새로 고르고 문 순서도 섞는다(문은 다가올 때 만들어지므로 여기서 바꾸면 된다)
+    const scenes = pickScenes();
+    course.filter(c => c.type === "gate").sort((a, b) => a.t - b.t).forEach((g, i) => {
+      const sc = scenes[i % scenes.length], order = [0, 1, 2].sort(() => Math.random() - 0.5);
+      g.sc = sc; g.gates = order.map((k, n) => ({ x: GATE_X[n], ...sc.opts[k] }));
+    });
     ui.setScore(0); ui.setCargo([]); ui.setMult(1); ui.setPower(0, 0);
   }
 
