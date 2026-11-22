@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-22T07:30:19.367Z">
+<meta name="build" content="2026-11-22T07:35:50.194Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -2214,7 +2214,7 @@ function clampSlot(i) { return Math.max(0, Math.min(4, i)); }
 function shuffle(a, rnd) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } }
 </script>
 <script type="text/plain" data-mod="./main.js">// 시작점. ?view=… 이면 캐릭터 확인 화면, 아니면 게임.
-// 시험용 주소 옵션: ?phase=0~2 (시간대 고정), ?auto=1 (자동 플레이, 퀴즈는 정답), ?manual=1 (프레임을 직접 진행: window.__game.step)
+// 시험용 주소 옵션: ?phase=0~2 (시간대 고정), ?auto=1 (자동 플레이, 퀴즈는 정답), ?manual=1 (프레임을 직접 진행: window.__game.step), ?rec=1 (시연영상 녹화: tools/record.cjs)
 import * as THREE from "three";
 import { createWorld } from "./world.js";
 import { createPlayer } from "./player.js";
@@ -2274,6 +2274,7 @@ function startGame() {
   const course = buildCourse();
   const rings = course.filter(i => i.type === "ring");
   const auto = q.has("auto");
+  const rec = q.has("rec"); // 시연영상 녹화: 자동 조종은 켜되 첫 화면·브리핑부터 보여 주고 카드는 녹화 스크립트가 닫는다
 
   // 달이: 브리핑·퀴즈 때 카메라 앞 위쪽에 나타난다
   const dali = createDali();
@@ -2432,7 +2433,7 @@ function startGame() {
     const orders = Object.entries(count).map(([n, c]) => `${n} ${c}곳`);
     const pool = CARDS.filter(c => c.topic === "pps" || c.id === "innov-pilot");
     const card = learn.read((pool.find(c => !learn.dexHas(c.id)) || pool[Math.floor(Math.random() * pool.length)]).id);
-    if (auto) { fly(); return; }
+    if (auto && !rec) { fly(); return; }
     ui.briefing(orders, card, fly);
   }
 
@@ -2606,7 +2607,7 @@ function startGame() {
       speed = speedAt(game.t) * game.slow * game.bk;
       const si = sectionAt(game.t);
       if (game.state === "play") {
-        if (auto) autoPilot();
+        if (auto && !game.pilotOff) autoPilot();
         if (si !== game.section && game.t >= SECTIONS[si].start) {
           game.section = si;
           sfx.banner(); if (si > 0) audio.music("play", si);
@@ -2674,7 +2675,7 @@ function startGame() {
   if (q.has("manual") || auto) endSplash();
   else { setTimeout(endSplash, Math.max(0, 2600 - (performance.now() - (window.__t0 || 0)))); splash?.addEventListener("pointerdown", endSplash); }
   window.__game = { game, player, world, step, scene, camera, course, learn, ui, briefing, fly, audio, fx, cam, objects, daliW };
-  if (auto) briefing(); else showTitle();
+  if (auto && !rec) briefing(); else showTitle();
   if (!q.has("manual")) {
     let last = performance.now();
     renderer.setAnimationLoop(now => { const dt = Math.min((now - last) / 1000, 1 / 20); last = now; step(dt); });
@@ -3506,7 +3507,7 @@ export function createUI(opt = {}) {
         if (Math.ceil(left) < before && before <= 3) S("tick"); // 마지막 3초 째깍
         bar.style.width = Math.max(0, left / 10 * 100) + "%"; if (left <= 0) pick(-1);
       };
-      ui._pick = pick; // 시험용
+      ui._pick = pick; ui._ans = qz.answer; // 시험·녹화용
     },
     result(r, onAgain, onDex) {
       const c = screen(`<h2 style="margin-bottom:4px">${esc(r.title)}</h2><div class="grade">${r.grade}</div>
