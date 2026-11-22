@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>나르미의 하늘 배송</title>
 <meta name="description" content="조달청 캐릭터 나르미가 하늘을 날아 공공기관에 혁신제품을 배달하는 3D 캐주얼 게임">
-<meta name="build" content="2026-11-22T07:35:50.194Z">
+<meta name="build" content="2026-11-22T07:47:09.659Z">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; color: #1d2a33; }
@@ -1559,6 +1559,12 @@ export function animateNarmi(n, t, opt = {}) {
 export function animateDali(d, t, opt = {}) {
   const { body, arms, tail, talkMouth } = d.parts;
   const talk = opt.talk ?? -1; // -1이면 말하지 않음
+  if (opt.float) { // 팔·꼬리는 가만히, 몸 전체가 둥실둥실 떠다닌다
+    body.position.y = Math.sin(t * 2.2) * 0.06;
+    body.rotation.set(0, 0, 0); tail.rotation.z = 0; arms[0].rotation.z = -0.25; arms[1].rotation.z = 0.25;
+    talkMouth.visible = talk > 0.05; talkMouth.scale.y = 0.05 * (0.3 + 0.9 * Math.max(0, talk));
+    return;
+  }
   body.position.y = Math.abs(Math.sin(t * 3)) * 0.04;
   tail.rotation.z = Math.sin(t * 2.2) * 0.12;
   arms[1].rotation.z = opt.wave ? -2.4 + Math.sin(t * 10) * 0.35 : 0.25;
@@ -2508,15 +2514,27 @@ function startGame() {
     daliW.root.rotation.y = Math.PI - 0.55; // 카메라(앞쪽)를 보며 나르미 쪽으로 살짝
     // 말하는 동안 입을 여닫는다: 글자마다 열고, 띄어쓰기·문장부호에서 닫는다
     const ch = ui.talking, talk = !ch ? -1 : /[\s.,!?·]/.test(ch) ? 0 : 0.45 + 0.55 * Math.abs(Math.sin(t * 17));
-    animateDali(daliW, t, { wave: game.rideOut >= 0 || game.rideT < 1.6, talk });
+    animateDali(daliW, t, { float: true, talk });
   }
 
+  // 카드가 떠 있을 때 달이: 가운데 카드 바로 위에서 카메라를 보고 둥실 떠 있다.
+  // 문·상식 카드 동안은 위쪽 점수판을 숨겨 달이 자리를 비운다(.screen.low 위 여백과 함께).
   function daliShow(on) {
     dali.root.visible = on;
-    const portrait = innerWidth < innerHeight;
-    // 세로: 카드 위쪽, 가로: 가운데 카드의 왼쪽
-    dali.root.position.set(portrait ? 0 : -2.25, portrait ? 0.8 : -0.3, -3.2);
-    dali.root.scale.setScalar(portrait ? 0.42 : 0.5);
+    if (["ask", "reveal", "fact"].includes(game.state)) ui.hud(!on);
+    if (on) placeDali();
+  }
+  const daliBox = new THREE.Box3().setFromObject(createDali().root); // 크기 1일 때 키·발 높이
+  const DALI_H = daliBox.max.y - daliBox.min.y, DALI_FOOT = daliBox.min.y;
+  function placeDali() {
+    const card = document.querySelector("#ui .screen > .card");
+    const z = -3.2, halfH = -z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), perPx = (2 * halfH) / innerHeight;
+    const top = card ? card.getBoundingClientRect().top : innerHeight * 0.4;
+    const hpx = Math.max(40, Math.min(innerHeight * 0.13, top - 12)); // 카드 위 빈자리에 맞는 키
+    const k = (hpx * perPx) / DALI_H;
+    dali.root.scale.setScalar(k);
+    dali.root.rotation.set(0, 0, 0); // 카메라를 본다
+    dali.root.position.set(0, halfH - (top + 6) * perPx - DALI_FOOT * k, z); // 발이 카드 윗변에 닿게
   }
 
   function orgsLeft(si) {
@@ -2657,7 +2675,7 @@ function startGame() {
     for (let i = drops.length - 1; i >= 0; i--) if (!drops[i](dt, speed)) drops.splice(i, 1);
     world.update(dt, speed, player.x);
     player.update(dt, game.state === "play" ? input.axis() : 0);
-    if (dali.root.visible) animateDali(dali, performance.now() / 1000, { wave: game.state === "brief" });
+    if (dali.root.visible) { placeDali(); animateDali(dali, performance.now() / 1000, { float: true }); }
     updateCamera(dt);
     ui.update(dt);
     renderer.render(scene, camera);
@@ -3185,7 +3203,7 @@ const CSS = `
 #ui .note h3, #ui .card h3 { margin:2px 0 4px; font-size:17px; }
 #ui .note p, #ui .card p { margin:0; line-height:1.55; color:#33434f; font-size:15px; }
 #ui .screen { position:absolute; inset:0; display:grid; place-items:center; padding:20px; background:rgba(16,40,64,.28); overflow:auto; }
-#ui .screen.low { place-items:center; background:rgba(16,40,64,.24); }
+#ui .screen.low { place-items:center; background:rgba(16,40,64,.24); padding-top:calc(13vh + 18px); } /* 위 여백은 카드 위에 서는 달이 자리 */
 #ui .card { background:#fff; border-radius:22px; padding:24px 22px 20px; width:min(92vw,400px); box-shadow:0 12px 40px rgba(10,30,50,.3); text-align:center; }
 #ui .card.left { text-align:left; }
 #ui .card h1 { margin:0 0 6px; font-size:26px; letter-spacing:-.5px; }
